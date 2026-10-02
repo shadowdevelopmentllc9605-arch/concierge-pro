@@ -31,20 +31,5 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Lint launch-readiness files
-        run: >
-          npx eslint --quiet
-          src/Layout.jsx
-          src/lib/vendorContext.js
-          src/pages/Home.jsx
-          src/pages/BusinessSetup.jsx
-          src/pages/Employees.jsx
-          src/pages/Inventory.jsx
-          src/pages/Customers.jsx
-          src/pages/CustomerDetail.jsx
-          src/pages/FloorView.jsx
-          src/pages/FittingRooms.jsx
-          src/pages/Checkout.jsx
-          src/pages/Notifications.jsx
-          src/pages/Metrics.jsx
-          src/pages/Procedures.jsx
+      - name: Lint application
+        run: npm run lint
