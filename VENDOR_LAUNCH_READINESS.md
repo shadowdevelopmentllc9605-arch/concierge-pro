@@ -87,6 +87,10 @@ The client can delete business-scoped entity records, but Base44 authentication 
 ### Variant inventory
 Inventory tracks item-level quantity. Sizes/colors exist but do not yet have independent per-variant stock counts.
 
+## Dependency security review
+
+GitHub's clean `npm ci` reported 28 dependency advisories in the imported Base44 dependency tree: 2 low, 12 moderate, 13 high and 1 critical. This branch does not run `npm audit fix --force` because forced upgrades can introduce breaking dependency changes. The specific advisory chain should be reviewed and upgraded deliberately before production.
+
 ## Deployment sequence after review
 
 1. Review this draft PR and confirm the vendor workflow.
