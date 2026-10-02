@@ -1,0 +1,90 @@
+{
+  "name": "InventoryItem",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "sku": {
+      "type": "string"
+    },
+    "category": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "price": {
+      "type": "number"
+    },
+    "cost": {
+      "type": "number"
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "number"
+        },
+        "height": {
+          "type": "number"
+        },
+        "depth": {
+          "type": "number"
+        },
+        "unit": {
+          "type": "string",
+          "default": "inches"
+        }
+      }
+    },
+    "stock_quantity": {
+      "type": "number",
+      "default": 0
+    },
+    "low_stock_threshold": {
+      "type": "number",
+      "default": 5
+    },
+    "floor_position": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "sizes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "colors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "business_id": {
+      "type": "string"
+    },
+    "linked_product_id": {
+      "type": "string",
+      "description": "ID from customer app for linking"
+    }
+  },
+  "required": [
+    "name",
+    "price"
+  ]
+}

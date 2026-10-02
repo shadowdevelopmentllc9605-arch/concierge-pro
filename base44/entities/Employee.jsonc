@@ -1,0 +1,77 @@
+{
+  "name": "Employee",
+  "type": "object",
+  "properties": {
+    "user_id": {
+      "type": "string",
+      "description": "Linked user account ID"
+    },
+    "name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "photo_url": {
+      "type": "string"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "manager",
+        "sales_associate",
+        "cashier"
+      ],
+      "default": "sales_associate"
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "view_metrics": {
+          "type": "boolean",
+          "default": false
+        },
+        "view_payroll": {
+          "type": "boolean",
+          "default": false
+        },
+        "edit_floor_plan": {
+          "type": "boolean",
+          "default": false
+        },
+        "view_procedures": {
+          "type": "boolean",
+          "default": false
+        },
+        "manage_inventory": {
+          "type": "boolean",
+          "default": false
+        },
+        "process_checkout": {
+          "type": "boolean",
+          "default": true
+        },
+        "send_notifications": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive",
+        "on_break"
+      ],
+      "default": "active"
+    },
+    "business_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "email"
+  ]
+}

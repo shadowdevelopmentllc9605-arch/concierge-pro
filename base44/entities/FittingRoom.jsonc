@@ -1,0 +1,41 @@
+{
+  "name": "FittingRoom",
+  "type": "object",
+  "properties": {
+    "room_number": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "available",
+        "occupied",
+        "cleaning"
+      ],
+      "default": "available"
+    },
+    "customer_id": {
+      "type": "string"
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Item IDs in the room"
+    },
+    "suggested_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Items cast to mirror"
+    },
+    "business_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "room_number"
+  ]
+}

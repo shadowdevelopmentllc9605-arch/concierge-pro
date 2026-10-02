@@ -1,0 +1,60 @@
+{
+  "name": "CustomerNotification",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "new_arrival",
+        "promo",
+        "birthday",
+        "coupon",
+        "general"
+      ],
+      "default": "general"
+    },
+    "target_customers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Customer IDs to send to, empty for all"
+    },
+    "coupon_code": {
+      "type": "string"
+    },
+    "discount_percent": {
+      "type": "number"
+    },
+    "valid_until": {
+      "type": "string",
+      "format": "date"
+    },
+    "sent_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "scheduled",
+        "sent"
+      ],
+      "default": "draft"
+    },
+    "business_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "message"
+  ]
+}

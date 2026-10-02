@@ -1,0 +1,96 @@
+{
+  "name": "StoreCustomer",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "photo_url": {
+      "type": "string"
+    },
+    "linked_customer_id": {
+      "type": "string",
+      "description": "Customer ID from customer-facing app"
+    },
+    "in_store": {
+      "type": "boolean",
+      "default": false
+    },
+    "store_position": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      }
+    },
+    "entered_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "assigned_employee_id": {
+      "type": "string"
+    },
+    "wishlist_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "fitting_room": {
+      "type": "string",
+      "description": "Assigned fitting room number"
+    },
+    "birthday": {
+      "type": "string",
+      "format": "date"
+    },
+    "preferences": {
+      "type": "object",
+      "properties": {
+        "favorite_brands": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sizes": {
+          "type": "object"
+        },
+        "style_preferences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "total_spent": {
+      "type": "number",
+      "default": 0
+    },
+    "visit_count": {
+      "type": "number",
+      "default": 0
+    },
+    "last_visit": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "business_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

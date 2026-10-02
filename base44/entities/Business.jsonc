@@ -1,0 +1,46 @@
+{
+  "name": "Business",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Business name"
+    },
+    "logo_url": {
+      "type": "string",
+      "description": "Business logo/picture URL"
+    },
+    "floor_plan_url": {
+      "type": "string",
+      "description": "Floor plan image URL"
+    },
+    "address": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "setup_complete": {
+      "type": "boolean",
+      "default": false
+    },
+    "open_procedures": {
+      "type": "string",
+      "description": "Opening procedures text"
+    },
+    "close_procedures": {
+      "type": "string",
+      "description": "Closing procedures text"
+    },
+    "linked_customer_app_id": {
+      "type": "string",
+      "description": "Link to customer-facing Concierge app"
+    }
+  },
+  "required": [
+    "name"
+  ]
+}
