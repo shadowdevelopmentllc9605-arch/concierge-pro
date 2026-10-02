@@ -31,7 +31,11 @@ export default function Customers() {
         return;
       }
 
-      const data = await base44.entities.StoreCustomer.filter({ business_id: context.businessId });
+      const query = context.isManager
+        ? { business_id: context.businessId }
+        : { business_id: context.businessId, assigned_employee_id: context.employee?.id || '__none__' };
+
+      const data = await base44.entities.StoreCustomer.filter(query);
       setCustomers(
         [...data].sort((a, b) => new Date(b.last_visit || 0) - new Date(a.last_visit || 0)).slice(0, 100)
       );
