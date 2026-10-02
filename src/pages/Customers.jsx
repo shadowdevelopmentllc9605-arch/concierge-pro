@@ -2,14 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Search, User, ShoppingBag, Heart, Calendar, Phone, Mail, Loader2, Filter, MapPin, ChevronRight } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Search, User, Calendar, Phone, Mail, Loader2, MapPin, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { format } from 'date-fns';
 import PullToRefresh from '@/components/ui/PullToRefresh';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function Customers() {
   const navigate = useNavigate();
@@ -24,8 +24,17 @@ export default function Customers() {
 
   const loadCustomers = useCallback(async () => {
     try {
-      const data = await base44.entities.StoreCustomer.list('-last_visit', 100);
-      setCustomers(data);
+      const context = await getVendorContext();
+
+      if (!context.businessId) {
+        setCustomers([]);
+        return;
+      }
+
+      const data = await base44.entities.StoreCustomer.filter({ business_id: context.businessId });
+      setCustomers(
+        [...data].sort((a, b) => new Date(b.last_visit || 0) - new Date(a.last_visit || 0)).slice(0, 100)
+      );
     } catch (err) {
       console.error(err);
     } finally {
