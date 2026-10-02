@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function Inventory() {
   const [items, setItems] = useState([]);
@@ -17,6 +18,7 @@ export default function Inventory() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [businessId, setBusinessId] = useState(null);
   const [form, setForm] = useState({
     name: '',
     sku: '',
@@ -37,7 +39,15 @@ export default function Inventory() {
 
   const loadItems = useCallback(async () => {
     try {
-      const data = await base44.entities.InventoryItem.list();
+      const context = await getVendorContext();
+      setBusinessId(context.businessId);
+
+      if (!context.businessId) {
+        setItems([]);
+        return;
+      }
+
+      const data = await base44.entities.InventoryItem.filter({ business_id: context.businessId });
       setItems(data);
     } catch (err) {
       console.error(err);
@@ -104,7 +114,9 @@ export default function Inventory() {
   };
 
   const saveItem = async () => {
+    if (!businessId) return;
     const data = {
+      business_id: businessId,
       name: form.name,
       sku: form.sku,
       category: form.category,
