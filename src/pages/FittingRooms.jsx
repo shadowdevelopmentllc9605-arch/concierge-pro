@@ -17,6 +17,7 @@ export default function FittingRooms() {
   const [newRoomNumber, setNewRoomNumber] = useState('');
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [businessId, setBusinessId] = useState(null);
+  const [canManageRooms, setCanManageRooms] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -26,6 +27,7 @@ export default function FittingRooms() {
     try {
       const context = await getVendorContext();
       setBusinessId(context.businessId);
+      setCanManageRooms(context.isManager);
 
       if (!context.businessId) {
         setRooms([]);
@@ -115,9 +117,11 @@ export default function FittingRooms() {
             <h1 className="text-3xl font-bold text-slate-900">Fitting Rooms</h1>
             <p className="text-slate-500">{rooms.filter(r => r.status === 'available').length} available</p>
           </div>
-          <Button onClick={() => setDialogOpen(true)} className="bg-violet-600 hover:bg-violet-700">
-            <Plus className="w-4 h-4 mr-2" /> Add Room
-          </Button>
+          {canManageRooms && (
+            <Button onClick={() => setDialogOpen(true)} className="bg-violet-600 hover:bg-violet-700">
+              <Plus className="w-4 h-4 mr-2" /> Add Room
+            </Button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
