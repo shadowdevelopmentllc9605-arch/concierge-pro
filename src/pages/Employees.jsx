@@ -178,6 +178,9 @@ export default function Employees() {
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Employees</h1>
             <p className="text-slate-500">Manage your team and their permissions</p>
+            <p className="text-xs text-amber-700 mt-1">
+              Employee profiles do not currently send account invitations; authentication provisioning must be handled separately.
+            </p>
           </div>
           <Button onClick={() => openDialog()} className="bg-violet-600 hover:bg-violet-700">
             <Plus className="w-4 h-4 mr-2" /> Add Employee
