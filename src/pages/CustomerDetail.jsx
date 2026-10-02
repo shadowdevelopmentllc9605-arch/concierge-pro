@@ -39,7 +39,7 @@ export default function CustomerDetail() {
         base44.entities.StoreCustomer.filter({ id: customerId, business_id: context.businessId }),
         base44.entities.Purchase.filter({ customer_id: customerId, business_id: context.businessId }),
         base44.entities.InventoryItem.filter({ business_id: context.businessId }),
-        base44.entities.FittingRoom.filter({ status: 'available', business_id: context.businessId }),
+        base44.entities.FittingRoom.filter({ business_id: context.businessId }),
         base44.entities.Employee.filter({ business_id: context.businessId })
       ]);
 
@@ -213,7 +213,7 @@ export default function CustomerDetail() {
                         <SelectValue placeholder="Assign fitting room" />
                       </SelectTrigger>
                       <SelectContent>
-                        {fittingRooms.map(room => (
+                        {fittingRooms.filter(room => room.status === 'available').map(room => (
                           <SelectItem key={room.id} value={room.room_number}>Room {room.room_number}</SelectItem>
                         ))}
                       </SelectContent>
