@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Safe area insets for iOS/Android */
+:root {
+  --sat: env(safe-area-inset-top);
+  --sar: env(safe-area-inset-right);
+  --sab: env(safe-area-inset-bottom);
+  --sal: env(safe-area-inset-left);
+}
+
+/* Prevent background bounce/overscroll on mobile */
+html, body {
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Disable text selection on interactive UI elements */
+button, a, nav, [role="button"], .select-none {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  user-select: none;
+}
+
+/* Bottom tab bar safe area padding */
+.bottom-tab-bar {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Mobile header safe area */
+.mobile-header {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Main content safe area bottom on mobile */
+.main-content-mobile {
+  padding-bottom: calc(4rem + env(safe-area-inset-bottom));
+}
