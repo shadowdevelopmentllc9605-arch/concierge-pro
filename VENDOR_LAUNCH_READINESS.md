@@ -96,3 +96,5 @@ Inventory tracks item-level quantity. Sizes/colors exist but do not yet have ind
 5. Apply approved schema and UI changes to a non-production Base44 checkpoint/environment first.
 6. Connect customer-app sync and payment services.
 7. Run manager and employee acceptance tests before production.
+
+Validation is performed by GitHub Actions on the review branch before the draft PR is considered ready for review.
