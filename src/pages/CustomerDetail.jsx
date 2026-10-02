@@ -18,6 +18,8 @@ export default function CustomerDetail() {
   const [fittingRooms, setFittingRooms] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentEmployee, setCurrentEmployee] = useState(null);
+  const [isManager, setIsManager] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
   const customerId = urlParams.get('id');
@@ -35,6 +37,9 @@ export default function CustomerDetail() {
         return;
       }
 
+      setCurrentEmployee(context.employee);
+      setIsManager(context.isManager);
+
       const [customerMatches, purchasesData, itemsData, roomsData, employeesData] = await Promise.all([
         base44.entities.StoreCustomer.filter({ id: customerId, business_id: context.businessId }),
         base44.entities.Purchase.filter({ customer_id: customerId, business_id: context.businessId }),
@@ -44,6 +49,20 @@ export default function CustomerDetail() {
       ]);
 
       const customerData = customerMatches[0] || null;
+      const canWorkWithCustomer =
+        context.isManager ||
+        !customerData?.assigned_employee_id ||
+        customerData.assigned_employee_id === context.employee?.id;
+
+      if (!canWorkWithCustomer) {
+        setCustomer(null);
+        setPurchases([]);
+        setWishlistItems([]);
+        setFittingRooms([]);
+        setEmployees([]);
+        return;
+      }
+
       setCustomer(customerData);
       setPurchases(purchasesData);
       setFittingRooms(roomsData);
@@ -63,6 +82,7 @@ export default function CustomerDetail() {
   };
 
   const assignEmployee = async (employeeId) => {
+    if (!isManager && employeeId !== currentEmployee?.id) return;
     try {
       await base44.entities.StoreCustomer.update(customerId, { assigned_employee_id: employeeId });
       setCustomer(prev => ({ ...prev, assigned_employee_id: employeeId }));
@@ -187,16 +207,28 @@ export default function CustomerDetail() {
               {/* Assign Employee */}
               <div className="mt-6">
                 <p className="text-sm text-slate-500 mb-2">Assigned To</p>
-                <Select value={customer.assigned_employee_id || ''} onValueChange={assignEmployee}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isManager ? (
+                  <Select value={customer.assigned_employee_id || ''} onValueChange={assignEmployee}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : customer.assigned_employee_id === currentEmployee?.id ? (
+                  <Badge className="bg-emerald-100 text-emerald-700">Assigned to you</Badge>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => currentEmployee?.id && assignEmployee(currentEmployee.id)}
+                    disabled={!currentEmployee?.id}
+                  >
+                    Assign to me
+                  </Button>
+                )}
               </div>
 
               {/* Fitting Room */}
