@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
+import { getVendorContext } from '@/lib/vendorContext';
 import { format, subDays, subMonths, subYears, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, getHours, parseISO, eachDayOfInterval, eachMonthOfInterval } from 'date-fns';
 
 // 2-hour time blocks
@@ -83,9 +84,18 @@ export default function Metrics() {
 
   const loadData = useCallback(async () => {
     try {
+      const context = await getVendorContext();
+
+      if (!context.businessId) {
+        setPurchases([]);
+        setCustomers([]);
+        setLastRefresh(new Date());
+        return;
+      }
+
       const [purchaseData, customerData] = await Promise.all([
-        base44.entities.Purchase.filter({ status: 'completed' }),
-        base44.entities.StoreCustomer.list()
+        base44.entities.Purchase.filter({ status: 'completed', business_id: context.businessId }),
+        base44.entities.StoreCustomer.filter({ business_id: context.businessId })
       ]);
       setPurchases(purchaseData);
       setCustomers(customerData);
