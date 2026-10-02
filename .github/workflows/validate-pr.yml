@@ -1,0 +1,50 @@
+name: Validate Concierge Pro PR
+
+on:
+  push:
+    branches:
+      - fix/vendor-launch-readiness-audit
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Lint launch-readiness files
+        run: >
+          npx eslint --quiet
+          src/Layout.jsx
+          src/lib/vendorContext.js
+          src/pages/Home.jsx
+          src/pages/BusinessSetup.jsx
+          src/pages/Employees.jsx
+          src/pages/Inventory.jsx
+          src/pages/Customers.jsx
+          src/pages/CustomerDetail.jsx
+          src/pages/FloorView.jsx
+          src/pages/FittingRooms.jsx
+          src/pages/Checkout.jsx
+          src/pages/Notifications.jsx
+          src/pages/Metrics.jsx
+          src/pages/Procedures.jsx
