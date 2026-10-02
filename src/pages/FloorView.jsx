@@ -108,6 +108,10 @@ export default function FloorView() {
 
   const assignToMe = async () => {
     if (!selectedCustomer || !currentEmployee?.id) return;
+    if (
+      selectedCustomer.assigned_employee_id &&
+      selectedCustomer.assigned_employee_id !== currentEmployee.id
+    ) return;
     try {
       await base44.entities.StoreCustomer.update(selectedCustomer.id, {
         assigned_employee_id: currentEmployee.id
@@ -327,11 +331,14 @@ export default function FloorView() {
                 <div>
                   <h4 className="font-medium mb-2">Wishlist Items</h4>
                   <div className="space-y-2">
-                    {selectedCustomer.wishlist_items.map((itemId, i) => (
-                      <div key={i} className="p-2 bg-slate-50 rounded-lg text-sm">
-                        Item #{itemId}
-                      </div>
-                    ))}
+                    {selectedCustomer.wishlist_items.map((itemId, i) => {
+                      const item = items.find(record => record.id === itemId);
+                      return (
+                        <div key={i} className="p-2 bg-slate-50 rounded-lg text-sm">
+                          {item?.name || 'Wishlist item'}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -340,9 +347,19 @@ export default function FloorView() {
                 <Button
                   className="flex-1 bg-violet-600 hover:bg-violet-700"
                   onClick={assignToMe}
-                  disabled={!currentEmployee?.id}
+                  disabled={
+                    !currentEmployee?.id ||
+                    Boolean(
+                      selectedCustomer.assigned_employee_id &&
+                      selectedCustomer.assigned_employee_id !== currentEmployee.id
+                    )
+                  }
                 >
-                  Assign to Me
+                  {selectedCustomer.assigned_employee_id === currentEmployee?.id
+                    ? 'Assigned to You'
+                    : selectedCustomer.assigned_employee_id
+                      ? 'Already Assigned'
+                      : 'Assign to Me'}
                 </Button>
                 <Button
                   variant="outline"
