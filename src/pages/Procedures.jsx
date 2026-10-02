@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function Procedures() {
   const [business, setBusiness] = useState(null);
@@ -21,8 +22,8 @@ export default function Procedures() {
 
   const loadBusiness = async () => {
     try {
-      const businesses = await base44.entities.Business.list();
-      if (businesses.length > 0) setBusiness(businesses[0]);
+      const context = await getVendorContext();
+      if (context.business) setBusiness(context.business);
     } catch (err) {
       console.error(err);
     } finally {
