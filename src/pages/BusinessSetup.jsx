@@ -134,8 +134,36 @@ export default function BusinessSetup() {
       setDeleteConfirm(true);
       return;
     }
+
+    if (!business?.id) return;
+
     try {
-      if (business) await base44.entities.Business.delete(business.id);
+      const [
+        employees,
+        inventory,
+        customers,
+        purchases,
+        notifications,
+        fittingRooms
+      ] = await Promise.all([
+        base44.entities.Employee.filter({ business_id: business.id }),
+        base44.entities.InventoryItem.filter({ business_id: business.id }),
+        base44.entities.StoreCustomer.filter({ business_id: business.id }),
+        base44.entities.Purchase.filter({ business_id: business.id }),
+        base44.entities.CustomerNotification.filter({ business_id: business.id }),
+        base44.entities.FittingRoom.filter({ business_id: business.id })
+      ]);
+
+      await Promise.all([
+        ...notifications.map(record => base44.entities.CustomerNotification.delete(record.id)),
+        ...purchases.map(record => base44.entities.Purchase.delete(record.id)),
+        ...fittingRooms.map(record => base44.entities.FittingRoom.delete(record.id)),
+        ...customers.map(record => base44.entities.StoreCustomer.delete(record.id)),
+        ...inventory.map(record => base44.entities.InventoryItem.delete(record.id)),
+        ...employees.map(record => base44.entities.Employee.delete(record.id))
+      ]);
+
+      await base44.entities.Business.delete(business.id);
       base44.auth.logout();
     } catch (err) {
       console.error(err);
@@ -275,7 +303,9 @@ export default function BusinessSetup() {
                     onChange={(e) => setForm({ ...form, linked_customer_app_id: e.target.value })}
                     placeholder="Customer Concierge App ID"
                   />
-                  <p className="text-xs text-slate-500">Connect to your customer-facing Concierge app</p>
+                  <p className="text-xs text-slate-500">
+                    Stores the customer-app identifier only. Cross-app synchronization still requires the shared backend/API integration.
+                  </p>
                 </div>
               </>
             )}
@@ -402,7 +432,7 @@ export default function BusinessSetup() {
                 )}
                 {deleteConfirm && (
                   <p className="text-xs text-red-500 text-center mt-2">
-                    This will permanently delete your business data and log you out.
+                    This deletes the vendor records Concierge Pro can address and logs you out. Your Base44 sign-in account and previously uploaded files may require separate platform-level deletion.
                   </p>
                 )}
               </div>
