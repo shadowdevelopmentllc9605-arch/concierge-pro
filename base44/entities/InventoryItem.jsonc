@@ -156,6 +156,12 @@
         "nightlife",
         "trendy"
       ]
+    },
+    "processed_stock_events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [
