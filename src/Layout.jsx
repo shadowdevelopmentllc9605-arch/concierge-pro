@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeProvider } from '@/components/ui/ThemeProvider';
 import { canAccessVendorPage, getVendorContext } from '@/lib/vendorContext';
+import { toast } from '@/components/ui/use-toast';
 
 const pageVariants = {
   initial: { opacity: 0, x: 24 },
@@ -32,6 +33,7 @@ export default function Layout({ children, currentPageName }) {
   const location = useLocation();
   const [user, setUser] = useState(null);
   const [employee, setEmployee] = useState(null);
+  const [businessId, setBusinessId] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
 
@@ -44,12 +46,31 @@ export default function Layout({ children, currentPageName }) {
       const context = await getVendorContext();
       setUser(context.user);
       setEmployee(context.employee);
+      setBusinessId(context.businessId);
+
+      if (context.businessId) {
+        base44.functions.invoke('retryIntegrationSyncs', {}).catch(() => {});
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setLoadingUser(false);
     }
   };
+
+  useEffect(() => {
+    if (!businessId) return undefined;
+    const unsubscribe = base44.entities.StoreAlert.subscribe((event) => {
+      const alert = event.data;
+      if (!alert || alert.business_id !== businessId) return;
+      if (event.type && !['create', 'created'].includes(event.type)) return;
+      toast({
+        title: alert.title || 'Concierge Pro',
+        description: alert.message || 'New store activity',
+      });
+    });
+    return unsubscribe;
+  }, [businessId]);
 
   const handleLogout = () => {
     base44.auth.logout();
@@ -97,8 +118,13 @@ export default function Layout({ children, currentPageName }) {
     { icon: DoorOpen, label: 'Fitting Rooms', page: 'FittingRooms', show: true },
     { icon: Bell, label: 'Notifications', page: 'Notifications', show: isManager || permissions.send_notifications },
     { icon: BarChart3, label: 'Metrics', page: 'Metrics', show: isManager || permissions.view_metrics },
+    { icon: FileText, label: 'Payroll', page: 'Payroll', show: isManager || permissions.view_payroll },
     { icon: FileText, label: 'Procedures', page: 'Procedures', show: isManager || permissions.view_procedures },
+    { icon: UserCircle, label: 'My Profile', page: 'EmployeeProfile', show: true },
     { icon: UserCircle, label: 'Employees', page: 'Employees', show: isManager },
+    { icon: MapPin, label: 'Locations', page: 'Locations', show: isManager },
+    { icon: FileText, label: 'FAQ', page: 'FAQ', show: true },
+    { icon: Bell, label: 'Support', page: 'Support', show: true },
     { icon: Settings, label: 'Settings', page: 'BusinessSetup', show: isManager }
   ].filter(item => item.show);
 

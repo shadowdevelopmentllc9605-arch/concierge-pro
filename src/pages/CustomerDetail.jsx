@@ -84,7 +84,12 @@ export default function CustomerDetail() {
   const assignEmployee = async (employeeId) => {
     if (!isManager && employeeId !== currentEmployee?.id) return;
     try {
-      await base44.entities.StoreCustomer.update(customerId, { assigned_employee_id: employeeId });
+      const response = await base44.functions.invoke('assignCustomer', {
+        customerId,
+        employeeId
+      });
+      const result = response?.data || response;
+      if (!result?.success) throw new Error(result?.error || 'Customer assignment failed.');
       setCustomer(prev => ({ ...prev, assigned_employee_id: employeeId }));
     } catch (err) {
       console.error(err);
@@ -280,7 +285,12 @@ export default function CustomerDetail() {
                           </div>
                         )}
                         <div className="flex-1">
-                          <p className="font-medium">{item.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{item.name}</p>
+                            {customer.try_on_request_items?.includes(item.id) && (
+                              <Badge className="bg-violet-100 text-violet-700">Requested now</Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-slate-500">${item.price?.toFixed(2)}</p>
                           {item.sizes && (
                             <p className="text-xs text-slate-400">{item.sizes.join(', ')}</p>

@@ -1,17 +1,65 @@
 {
-  "properties": {
-    "role": {
-      "type": "string",
-      "description": "The role of the user in the app",
-      "enum": [
-        "admin",
-        "user"
-      ]
-    }
-  },
-  "required": [
-    "role"
-  ],
   "name": "User",
-  "type": "object"
+  "type": "object",
+  "properties": {
+    "business_id": {
+      "type": "string",
+      "description": "Trusted vendor business membership",
+      "rls": {
+        "read": true,
+        "write": false
+      }
+    },
+    "vendor_role": {
+      "type": "string",
+      "enum": [
+        "manager",
+        "sales_associate",
+        "cashier"
+      ],
+      "description": "Trusted vendor role",
+      "rls": {
+        "read": true,
+        "write": false
+      }
+    },
+    "vendor_permissions": {
+      "type": "object",
+      "description": "Trusted vendor permissions",
+      "rls": {
+        "read": true,
+        "write": false
+      },
+      "properties": {
+        "view_metrics": {
+          "type": "boolean",
+          "default": false
+        },
+        "view_payroll": {
+          "type": "boolean",
+          "default": false
+        },
+        "edit_floor_plan": {
+          "type": "boolean",
+          "default": false
+        },
+        "view_procedures": {
+          "type": "boolean",
+          "default": false
+        },
+        "manage_inventory": {
+          "type": "boolean",
+          "default": false
+        },
+        "process_checkout": {
+          "type": "boolean",
+          "default": false
+        },
+        "send_notifications": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  }
 }

@@ -51,10 +51,81 @@
     },
     "business_id": {
       "type": "string"
+    },
+    "delivery_error": {
+      "type": "string"
     }
   },
   "required": [
     "title",
     "message"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "$and": [
+        {
+          "data.business_id": "{{user.data.business_id}}"
+        },
+        {
+          "$or": [
+            {
+              "user_condition": {
+                "data.vendor_role": "manager"
+              }
+            },
+            {
+              "user_condition": {
+                "data.vendor_permissions.send_notifications": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "read": {
+      "data.business_id": "{{user.data.business_id}}"
+    },
+    "update": {
+      "$and": [
+        {
+          "data.business_id": "{{user.data.business_id}}"
+        },
+        {
+          "$or": [
+            {
+              "user_condition": {
+                "data.vendor_role": "manager"
+              }
+            },
+            {
+              "user_condition": {
+                "data.vendor_permissions.send_notifications": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "delete": {
+      "$and": [
+        {
+          "data.business_id": "{{user.data.business_id}}"
+        },
+        {
+          "$or": [
+            {
+              "user_condition": {
+                "data.vendor_role": "manager"
+              }
+            },
+            {
+              "user_condition": {
+                "data.vendor_permissions.send_notifications": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

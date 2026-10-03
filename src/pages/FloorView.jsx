@@ -113,9 +113,12 @@ export default function FloorView() {
       selectedCustomer.assigned_employee_id !== currentEmployee.id
     ) return;
     try {
-      await base44.entities.StoreCustomer.update(selectedCustomer.id, {
-        assigned_employee_id: currentEmployee.id
+      const response = await base44.functions.invoke('assignCustomer', {
+        customerId: selectedCustomer.id,
+        employeeId: currentEmployee.id
       });
+      const result = response?.data || response;
+      if (!result?.success) throw new Error(result?.error || 'Customer assignment failed.');
       setSelectedCustomer(prev => prev ? { ...prev, assigned_employee_id: currentEmployee.id } : prev);
       setCustomers(prev => prev.map(customer =>
         customer.id === selectedCustomer.id

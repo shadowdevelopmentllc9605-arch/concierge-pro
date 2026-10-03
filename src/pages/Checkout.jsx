@@ -26,6 +26,11 @@ export default function Checkout() {
   const [paymentError, setPaymentError] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [showSuccess, setShowSuccess] = useState(false);
+  const [lastSaleTotal, setLastSaleTotal] = useState(0);
+  const [locationTaxRate, setLocationTaxRate] = useState(null);
+  const [saleRequestId, setSaleRequestId] = useState(() => crypto.randomUUID());
+
+  const resetSaleRequest = () => setSaleRequestId(crypto.randomUUID());
 
   const urlParams = new URLSearchParams(window.location.search);
   const preselectedCustomerId = urlParams.get('customer');
@@ -53,6 +58,20 @@ export default function Checkout() {
       setInventory(inventoryData);
       setCustomers(customersData);
 
+      const defaultLocationId =
+        context.employee?.location_id ||
+        context.business?.default_location_id ||
+        '';
+      if (defaultLocationId) {
+        const locations = await base44.entities.BusinessLocation.filter({
+          id: defaultLocationId,
+          business_id: context.businessId
+        });
+        setLocationTaxRate(Number(locations[0]?.tax_rate ?? 0));
+      } else {
+        setLocationTaxRate(null);
+      }
+
       if (preselectedCustomerId) {
         const customer = customersData.find(record => record.id === preselectedCustomerId);
         if (customer) setSelectedCustomer(customer);
@@ -70,17 +89,25 @@ export default function Checkout() {
     const existing = cart.find(cartItem => cartItem.id === item.id);
     if (existing) {
       if (existing.quantity >= (item.stock_quantity || 0)) return;
+      resetSaleRequest();
       setCart(cart.map(cartItem =>
         cartItem.id === item.id
           ? { ...cartItem, quantity: cartItem.quantity + 1 }
           : cartItem
       ));
     } else {
-      setCart([...cart, { ...item, quantity: 1 }]);
+      resetSaleRequest();
+      setCart([...cart, {
+        ...item,
+        quantity: 1,
+        selectedSize: item.sizes?.length === 1 ? item.sizes[0] : '',
+        selectedColor: item.colors?.length === 1 ? item.colors[0] : ''
+      }]);
     }
   };
 
   const updateQuantity = (itemId, delta) => {
+    resetSaleRequest();
     setCart(cart
       .map(cartItem => {
         if (cartItem.id !== itemId) return cartItem;
@@ -95,12 +122,13 @@ export default function Checkout() {
   };
 
   const removeFromCart = (itemId) => {
+    resetSaleRequest();
     setCart(cart.filter(c => c.id !== itemId));
   };
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const discountAmount = subtotal * (discount / 100);
-  const taxRate = Math.max(0, Number(business?.tax_rate) || 0);
+  const taxRate = Math.max(0, Number(locationTaxRate ?? business?.tax_rate) || 0);
   const tax = (subtotal - discountAmount) * (taxRate / 100);
   const total = subtotal - discountAmount + tax;
 
@@ -112,51 +140,51 @@ export default function Checkout() {
       return;
     }
 
-    const insufficientStock = cart.find(item => item.quantity > (item.stock_quantity || 0));
-    if (insufficientStock) {
-      setPaymentError(`Not enough stock is available for ${insufficientStock.name}.`);
+    const missingOptions = cart.find(item =>
+      (item.sizes?.length > 0 && !item.selectedSize) ||
+      (item.colors?.length > 0 && !item.selectedColor)
+    );
+    if (missingOptions) {
+      setPaymentError(`Choose the size and color for ${missingOptions.name} before checkout.`);
       return;
     }
 
     setPaymentError('');
     setProcessing(true);
     try {
-      await base44.entities.Purchase.create({
-        customer_id: selectedCustomer.id,
-        employee_id: employee?.id || '',
-        business_id: business.id,
+      const locationId =
+        selectedCustomer.location_id ||
+        employee?.location_id ||
+        business.default_location_id ||
+        '';
+
+      const response = await base44.functions.invoke('recordSale', {
+        customerId: selectedCustomer.id,
+        locationId,
+        paymentMethod,
+        discountPercent: discount,
+        idempotencyKey: saleRequestId,
         items: cart.map(item => ({
-          inventory_item_id: item.id,
-          name: item.name,
+          inventoryItemId: item.id,
           quantity: item.quantity,
-          price: item.price
-        })),
-        subtotal,
-        tax,
-        discount: discountAmount,
-        total,
-        payment_method: 'cash',
-        status: 'completed'
+          size: item.selectedSize || '',
+          color: item.selectedColor || ''
+        }))
       });
+      const result = response?.data || response;
 
-      await Promise.all(cart.map(item =>
-        base44.entities.InventoryItem.update(item.id, {
-          stock_quantity: Math.max(0, (item.stock_quantity || 0) - item.quantity)
-        })
-      ));
+      if (!result?.success) {
+        throw new Error(result?.error || 'The sale could not be recorded.');
+      }
 
-      const purchasedIds = new Set(cart.map(item => item.id));
-      await base44.entities.StoreCustomer.update(selectedCustomer.id, {
-        total_spent: (selectedCustomer.total_spent || 0) + total,
-        last_visit: new Date().toISOString(),
-        wishlist_items: (selectedCustomer.wishlist_items || []).filter(id => !purchasedIds.has(id))
-      });
-
+      setLastSaleTotal(Number(result.total || 0));
       setShowSuccess(true);
       setCart([]);
+      setSaleRequestId(crypto.randomUUID());
+      await loadData();
     } catch (err) {
       console.error(err);
-      setPaymentError('The sale could not be recorded. Inventory was not intentionally marked complete by the UI.');
+      setPaymentError(err?.response?.data?.error || err?.message || 'The sale could not be recorded.');
     } finally {
       setProcessing(false);
     }
@@ -233,7 +261,10 @@ export default function Checkout() {
             
             <Select 
               value={selectedCustomer?.id || ''} 
-              onValueChange={(v) => setSelectedCustomer(customers.find(c => c.id === v))}
+              onValueChange={(v) => {
+                resetSaleRequest();
+                setSelectedCustomer(customers.find(c => c.id === v));
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select customer" />
@@ -270,6 +301,36 @@ export default function Checkout() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{item.name}</p>
                     <p className="text-sm text-slate-500">${item.price?.toFixed(2)}</p>
+                    {(item.sizes?.length > 0 || item.colors?.length > 0) && (
+                      <div className="grid grid-cols-2 gap-1 mt-2">
+                        {item.sizes?.length > 0 && (
+                          <Select
+                            value={item.selectedSize || ''}
+                            onValueChange={(value) => setCart(prev => prev.map(row =>
+                              row.id === item.id ? { ...row, selectedSize: value } : row
+                            ))}
+                          >
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Size" /></SelectTrigger>
+                            <SelectContent>
+                              {item.sizes.map(size => <SelectItem key={size} value={size}>{size}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        )}
+                        {item.colors?.length > 0 && (
+                          <Select
+                            value={item.selectedColor || ''}
+                            onValueChange={(value) => setCart(prev => prev.map(row =>
+                              row.id === item.id ? { ...row, selectedColor: value } : row
+                            ))}
+                          >
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Color" /></SelectTrigger>
+                            <SelectContent>
+                              {item.colors.map(color => <SelectItem key={color} value={color}>{color}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-center gap-2">
                     <Button size="icon" variant="outline" className="w-7 h-7" onClick={() => updateQuantity(item.id, -1)}>
@@ -368,7 +429,7 @@ export default function Checkout() {
               <Check className="w-10 h-10 text-emerald-600" />
             </div>
             <DialogTitle className="text-2xl mb-2">Cash Sale Recorded</DialogTitle>
-            <p className="text-slate-500 mb-6">Cash transaction recorded for ${total.toFixed(2)}</p>
+            <p className="text-slate-500 mb-6">Cash transaction recorded for ${lastSaleTotal.toFixed(2)}</p>
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setShowSuccess(false)}>
                 New Order

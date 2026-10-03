@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Bell, Send, Gift, Tag, Megaphone, Sparkles, Trash2, Loader2, AlertTriangle } from 'lucide-react';
+import { Bell, Send, Gift, Tag, Megaphone, Sparkles, Trash2, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +19,7 @@ export default function Notifications() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [businessId, setBusinessId] = useState(null);
+  const [deliveryMessage, setDeliveryMessage] = useState(null);
   const [form, setForm] = useState({
     title: '',
     message: '',
@@ -90,36 +91,36 @@ export default function Notifications() {
   const sendNotification = async () => {
     if (!businessId) return;
     setSending(true);
+    setDeliveryMessage(null);
     try {
-      let targetCustomers = [];
-      
-      if (form.target === 'birthday') {
-        const today = format(new Date(), 'MM-dd');
-        targetCustomers = customers
-          .filter(c => c.birthday && format(new Date(c.birthday), 'MM-dd') === today)
-          .map(c => c.id);
-      } else if (form.target === 'vip') {
-        targetCustomers = customers.filter(c => c.total_spent >= 1000).map(c => c.id);
-      } else if (form.target === 'in_store') {
-        targetCustomers = customers.filter(c => c.in_store).map(c => c.id);
+      const response = await base44.functions.invoke('sendCampaign', {
+        campaign: {
+          title: form.title,
+          message: form.message,
+          type: form.type,
+          coupon_code: form.coupon_code || '',
+          discount_percent: form.discount_percent ? parseFloat(form.discount_percent) : undefined,
+          valid_until: form.valid_until || '',
+          target: form.target
+        }
+      });
+      const result = response?.data || response;
+
+      if (!result?.success) {
+        throw new Error(result?.error || 'The campaign could not be delivered.');
       }
 
-      await base44.entities.CustomerNotification.create({
-        title: form.title,
-        message: form.message,
-        type: form.type,
-        coupon_code: form.coupon_code || undefined,
-        discount_percent: form.discount_percent ? parseFloat(form.discount_percent) : undefined,
-        valid_until: form.valid_until || undefined,
-        target_customers: targetCustomers,
-        business_id: businessId,
-        status: 'draft'
+      setDeliveryMessage({
+        type: 'success',
+        text: `Delivered to ${result.delivered || 0} linked customer${result.delivered === 1 ? '' : 's'}.`
       });
-
       setDialogOpen(false);
-      loadData();
+      await loadData();
     } catch (err) {
       console.error(err);
+      const message = err?.response?.data?.error || err?.message || 'The campaign could not be delivered.';
+      setDeliveryMessage({ type: 'error', text: message });
+      await loadData();
     } finally {
       setSending(false);
     }
@@ -168,14 +169,30 @@ export default function Notifications() {
           </div>
         </div>
 
-        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 flex gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-          <p className="text-sm text-amber-900">
-            Customer-app delivery is not connected yet. Campaigns created here are saved as drafts and are not sent to customers.
+        <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 flex gap-3">
+          <Bell className="w-5 h-5 text-violet-600 shrink-0 mt-0.5" />
+          <p className="text-sm text-slate-700">
+            Campaigns are delivered to customers linked with The Concierge. If delivery cannot complete, the campaign is retained as a draft with the error shown below.
           </p>
         </div>
 
-        {/* Campaign Draft Buttons */}
+        {deliveryMessage && (
+          <div className={`mb-6 rounded-xl border p-4 flex gap-3 ${
+            deliveryMessage.type === 'success'
+              ? 'border-emerald-200 bg-emerald-50'
+              : 'border-amber-200 bg-amber-50'
+          }`}>
+            {deliveryMessage.type === 'success'
+              ? <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
+              : <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+            }
+            <p className={`text-sm ${deliveryMessage.type === 'success' ? 'text-emerald-900' : 'text-amber-900'}`}>
+              {deliveryMessage.text}
+            </p>
+          </div>
+        )}
+
+        {/* Campaign Buttons */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Button
             variant="outline"
@@ -214,13 +231,13 @@ export default function Notifications() {
         {/* Recent Notifications */}
         <Card className="border-0 shadow-xl">
           <CardHeader>
-            <CardTitle>Campaign Drafts</CardTitle>
+            <CardTitle>Campaign History</CardTitle>
           </CardHeader>
           <CardContent>
             {notifications.length === 0 ? (
               <div className="text-center py-12">
                 <Bell className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500">No campaign drafts yet</p>
+                <p className="text-slate-500">No campaigns yet</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -245,11 +262,12 @@ export default function Notifications() {
                           </p>
                         )}
                         <p className="text-xs text-slate-400 mt-2">
-                          {notif.status === 'draft' ? 'Draft' : notif.status}
+                          {notif.status === 'draft' ? 'Draft / delivery pending' : notif.status}
                           {notif.created_date ? ` • ${format(new Date(notif.created_date), 'MMM d, yyyy h:mm a')}` : ''}
                           {notif.target_customers?.length > 0
                             ? ` • ${notif.target_customers.length} selected customers`
                             : ' • all customers'}
+                          {notif.delivery_error ? ` • ${notif.delivery_error}` : ''}
                         </p>
                       </div>
                       <Button size="icon" variant="ghost" onClick={() => deleteNotification(notif.id)} className="text-slate-400 hover:text-red-500">
@@ -268,7 +286,7 @@ export default function Notifications() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Campaign Draft</DialogTitle>
+            <DialogTitle>Create Customer Campaign</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
@@ -344,7 +362,7 @@ export default function Notifications() {
               disabled={!form.title || !form.message || sending}
             >
               {sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-              Save Draft
+              Send Campaign
             </Button>
           </div>
         </DialogContent>

@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MANAGER_PERMISSIONS } from '@/lib/vendorContext';
 
 export default function BusinessSetup() {
   const navigate = useNavigate();
@@ -104,24 +103,9 @@ export default function BusinessSetup() {
         setBusiness(savedBusiness);
       }
 
-      const employees = await base44.entities.Employee.filter({ email: userData.email });
-      const existingManager = employees[0];
-
-      const managerData = {
-        user_id: userData.id,
-        name: userData.full_name || userData.name || userData.email,
-        email: userData.email,
-        role: 'manager',
-        permissions: MANAGER_PERMISSIONS,
-        status: 'active',
-        business_id: savedBusiness.id,
-      };
-
-      if (existingManager) {
-        await base44.entities.Employee.update(existingManager.id, managerData);
-      } else {
-        await base44.entities.Employee.create(managerData);
-      }
+      // The backend claim function creates/updates the manager Employee record
+      // and protected User membership fields. Browser code cannot grant itself roles.
+      await base44.functions.invoke('claimVendorMembership', {});
     } catch (err) {
       console.error(err);
     } finally {
@@ -135,38 +119,14 @@ export default function BusinessSetup() {
       return;
     }
 
-    if (!business?.id) return;
-
     try {
-      const [
-        employees,
-        inventory,
-        customers,
-        purchases,
-        notifications,
-        fittingRooms
-      ] = await Promise.all([
-        base44.entities.Employee.filter({ business_id: business.id }),
-        base44.entities.InventoryItem.filter({ business_id: business.id }),
-        base44.entities.StoreCustomer.filter({ business_id: business.id }),
-        base44.entities.Purchase.filter({ business_id: business.id }),
-        base44.entities.CustomerNotification.filter({ business_id: business.id }),
-        base44.entities.FittingRoom.filter({ business_id: business.id })
-      ]);
-
-      await Promise.all([
-        ...notifications.map(record => base44.entities.CustomerNotification.delete(record.id)),
-        ...purchases.map(record => base44.entities.Purchase.delete(record.id)),
-        ...fittingRooms.map(record => base44.entities.FittingRoom.delete(record.id)),
-        ...customers.map(record => base44.entities.StoreCustomer.delete(record.id)),
-        ...inventory.map(record => base44.entities.InventoryItem.delete(record.id)),
-        ...employees.map(record => base44.entities.Employee.delete(record.id))
-      ]);
-
-      await base44.entities.Business.delete(business.id);
+      const response = await base44.functions.invoke('deleteVendorBusiness', {});
+      const result = response?.data || response;
+      if (!result?.success) throw new Error(result?.error || 'Business data could not be deleted.');
       base44.auth.logout();
     } catch (err) {
       console.error(err);
+      alert(err?.response?.data?.error || err?.message || 'Business data could not be deleted.');
     }
   };
 
@@ -292,19 +252,14 @@ export default function BusinessSetup() {
                     placeholder="7.25"
                   />
                   <p className="text-xs text-slate-500">
-                    Used for the current single-location POS. Multi-location tax rules require per-location configuration.
+                    Default/fallback tax rate. Configure each store's tax rate on the Locations page.
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Link to Customer App (Optional)</Label>
-                  <Input
-                    value={form.linked_customer_app_id}
-                    onChange={(e) => setForm({ ...form, linked_customer_app_id: e.target.value })}
-                    placeholder="Customer Concierge App ID"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Stores the customer-app identifier only. Cross-app synchronization still requires the shared backend/API integration.
+                <div className="rounded-lg border border-violet-100 bg-violet-50 p-3">
+                  <p className="text-sm font-medium text-violet-900">The Concierge customer app</p>
+                  <p className="text-xs text-violet-700 mt-1">
+                    Customer-app synchronization is handled by the secure integration bridge. Use Sync Customer App from Inventory or Locations after your store data is ready.
                   </p>
                 </div>
               </>
@@ -432,7 +387,7 @@ export default function BusinessSetup() {
                 )}
                 {deleteConfirm && (
                   <p className="text-xs text-red-500 text-center mt-2">
-                    This deletes the vendor records Concierge Pro can address and logs you out. Your Base44 sign-in account and previously uploaded files may require separate platform-level deletion.
+                    This permanently deletes this business, its Concierge Pro records, your Base44 owner sign-in account, and linked catalog data in The Concierge. Employee logins are retained but their access to this business is revoked. Base44 does not currently expose an SDK method to purge previously uploaded files from storage.
                   </p>
                 )}
               </div>

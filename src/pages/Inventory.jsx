@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
 import PullToRefresh from '@/components/ui/PullToRefresh';
-import { Plus, Pencil, Trash2, Package, Search, AlertTriangle, Loader2, X, Image } from 'lucide-react';
+import { Plus, Pencil, Trash2, Package, Search, AlertTriangle, Loader2, X, Image, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,10 +19,16 @@ export default function Inventory() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [businessId, setBusinessId] = useState(null);
+  const [locations, setLocations] = useState([]);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
   const [form, setForm] = useState({
     name: '',
     sku: '',
+    brand: '',
+    style_type: 'casual',
     category: '',
+    location_id: '',
     description: '',
     price: '',
     cost: '',
@@ -34,7 +40,10 @@ export default function Inventory() {
     dimension_width: '',
     dimension_height: '',
     dimension_depth: '',
-    dimension_unit: 'inches'
+    dimension_unit: 'inches',
+    tryOn_image: '',
+    size_chart_json: '[]',
+    variants_json: '[]'
   });
 
   useEffect(() => {
@@ -51,8 +60,12 @@ export default function Inventory() {
         return;
       }
 
-      const data = await base44.entities.InventoryItem.filter({ business_id: context.businessId });
+      const [data, locationData] = await Promise.all([
+        base44.entities.InventoryItem.filter({ business_id: context.businessId }),
+        base44.entities.BusinessLocation.filter({ business_id: context.businessId, active: true })
+      ]);
       setItems(data);
+      setLocations(locationData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -75,6 +88,33 @@ export default function Inventory() {
     }
   };
 
+  const handleTryOnUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      setForm(prev => ({ ...prev, tryOn_image: file_url }));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const syncToCustomerApp = async () => {
+    setSyncing(true);
+    setSyncMessage('');
+    try {
+      const response = await base44.functions.invoke('syncVendorCatalog', {});
+      const result = response?.data || response;
+      if (!result?.success) throw new Error(result?.error || 'Catalog sync failed.');
+      setSyncMessage(`Synced ${result.syncedItems || 0} item(s) to The Concierge.`);
+      await loadItems();
+    } catch (err) {
+      setSyncMessage(err?.response?.data?.error || err?.message || 'Catalog sync failed.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const removeImage = (index) => {
     setForm(prev => ({
       ...prev,
@@ -88,7 +128,10 @@ export default function Inventory() {
       setForm({
         name: item.name || '',
         sku: item.sku || '',
+        brand: item.brand || '',
+        style_type: item.style_type || 'casual',
         category: item.category || '',
+        location_id: item.location_id || '',
         description: item.description || '',
         price: item.price?.toString() || '',
         cost: item.cost?.toString() || '',
@@ -100,14 +143,20 @@ export default function Inventory() {
         dimension_width: item.dimensions?.width?.toString() || '',
         dimension_height: item.dimensions?.height?.toString() || '',
         dimension_depth: item.dimensions?.depth?.toString() || '',
-        dimension_unit: item.dimensions?.unit || 'inches'
+        dimension_unit: item.dimensions?.unit || 'inches',
+        tryOn_image: item.tryOn_image || '',
+        size_chart_json: JSON.stringify(item.size_chart || [], null, 2),
+        variants_json: JSON.stringify(item.variants || [], null, 2)
       });
     } else {
       setEditing(null);
       setForm({
         name: '',
         sku: '',
+        brand: '',
+        style_type: 'casual',
         category: '',
+        location_id: '',
         description: '',
         price: '',
         cost: '',
@@ -119,7 +168,10 @@ export default function Inventory() {
         dimension_width: '',
         dimension_height: '',
         dimension_depth: '',
-        dimension_unit: 'inches'
+        dimension_unit: 'inches',
+        tryOn_image: '',
+        size_chart_json: '[]',
+        variants_json: '[]'
       });
     }
     setDialogOpen(true);
@@ -127,19 +179,41 @@ export default function Inventory() {
 
   const saveItem = async () => {
     if (!businessId) return;
+
+    let sizeChart = [];
+    let variants = [];
+    try {
+      sizeChart = JSON.parse(form.size_chart_json || '[]');
+      variants = JSON.parse(form.variants_json || '[]');
+      if (!Array.isArray(sizeChart) || !Array.isArray(variants)) throw new Error('arrays required');
+    } catch {
+      alert('Size chart and variant stock must be valid JSON arrays.');
+      return;
+    }
+
+    const totalVariantStock = variants.length
+      ? variants.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock_quantity || 0)), 0)
+      : null;
+
     const data = {
       business_id: businessId,
       name: form.name,
       sku: form.sku,
+      brand: form.brand,
+      style_type: form.style_type,
       category: form.category,
+      location_id: form.location_id,
       description: form.description,
       price: parseFloat(form.price) || 0,
       cost: parseFloat(form.cost) || 0,
-      stock_quantity: parseInt(form.stock_quantity) || 0,
+      stock_quantity: totalVariantStock ?? (parseInt(form.stock_quantity) || 0),
       low_stock_threshold: parseInt(form.low_stock_threshold) || 5,
       images: form.images,
       sizes: form.sizes.split(',').map(s => s.trim()).filter(Boolean),
       colors: form.colors.split(',').map(s => s.trim()).filter(Boolean),
+      tryOn_image: form.tryOn_image || '',
+      size_chart: sizeChart,
+      variants,
       dimensions: {
         width: parseFloat(form.dimension_width) || 0,
         height: parseFloat(form.dimension_height) || 0,
@@ -217,11 +291,21 @@ export default function Inventory() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
+            <Button variant="outline" onClick={syncToCustomerApp} disabled={syncing}>
+              {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+              Sync Customer App
+            </Button>
             <Button onClick={() => openDialog()} className="bg-violet-600 hover:bg-violet-700">
               <Plus className="w-4 h-4 mr-2" /> Add Item
             </Button>
           </div>
         </div>
+
+        {syncMessage && (
+          <div className="mb-6 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+            {syncMessage}
+          </div>
+        )}
 
         {lowStockCount > 0 && (
           <Card className="border-amber-200 bg-amber-50 mb-6">
@@ -351,6 +435,40 @@ export default function Inventory() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Brand</Label>
+                <Input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} placeholder="Brand" />
+              </div>
+              <div className="space-y-2">
+                <Label>Style</Label>
+                <select
+                  value={form.style_type}
+                  onChange={(e) => setForm({ ...form, style_type: e.target.value })}
+                  className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                >
+                  <option value="business">Business</option>
+                  <option value="casual">Casual</option>
+                  <option value="nightlife">Nightlife</option>
+                  <option value="trendy">Trendy</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Location</Label>
+              <select
+                value={form.location_id}
+                onChange={(e) => setForm({ ...form, location_id: e.target.value })}
+                className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              >
+                <option value="">All / default location</option>
+                {locations.map(location => (
+                  <option key={location.id} value={location.id}>{location.name}</option>
+                ))}
+              </select>
+            </div>
+
             <div className="space-y-2">
               <Label>Category</Label>
               <Input
@@ -453,6 +571,17 @@ export default function Inventory() {
               </p>
             </div>
 
+            <div className="space-y-2">
+              <Label>Virtual Try-On Asset</Label>
+              <div className="flex gap-3 items-center">
+                {form.tryOn_image && <img src={form.tryOn_image} alt="Try-on asset" className="w-16 h-16 object-contain bg-slate-100 rounded-lg" />}
+                <label className="px-3 py-2 rounded-lg border border-slate-200 cursor-pointer text-sm">
+                  Upload transparent garment image
+                  <input type="file" className="hidden" accept="image/*" onChange={handleTryOnUpload} />
+                </label>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Sizes (comma separated)</Label>
@@ -470,6 +599,30 @@ export default function Inventory() {
                   placeholder="Black, White, Blue"
                 />
               </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Brand / Product Size Chart (JSON)</Label>
+              <Textarea
+                value={form.size_chart_json}
+                onChange={(e) => setForm({ ...form, size_chart_json: e.target.value })}
+                rows={7}
+                className="font-mono text-xs"
+                placeholder={'[{"size":"M","chest_min_cm":94,"chest_max_cm":102,"waist_min_cm":80,"waist_max_cm":88}]'}
+              />
+              <p className="text-xs text-slate-500">Use centimeters. These ranges drive customer-specific “Best match” sizing.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Size / Color Variant Stock (JSON)</Label>
+              <Textarea
+                value={form.variants_json}
+                onChange={(e) => setForm({ ...form, variants_json: e.target.value })}
+                rows={7}
+                className="font-mono text-xs"
+                placeholder={'[{"size":"M","color":"Navy","sku":"SKU-M-NVY","stock_quantity":4}]'}
+              />
+              <p className="text-xs text-slate-500">When variants are present, total stock is calculated from the variants.</p>
             </div>
 
             <Button onClick={saveItem} className="w-full bg-violet-600 hover:bg-violet-700" disabled={!form.name}>

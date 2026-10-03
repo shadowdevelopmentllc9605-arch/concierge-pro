@@ -51,9 +51,65 @@
     "linked_customer_app_id": {
       "type": "string",
       "description": "Link to customer-facing Concierge app"
+    },
+    "default_location_id": {
+      "type": "string"
     }
   },
   "required": [
     "name"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "data.owner_user_id": "{{user.id}}"
+    },
+    "read": {
+      "$or": [
+        {
+          "id": "{{user.data.business_id}}"
+        },
+        {
+          "data.owner_user_id": "{{user.id}}"
+        }
+      ]
+    },
+    "update": {
+      "$or": [
+        {
+          "data.owner_user_id": "{{user.id}}"
+        },
+        {
+          "$and": [
+            {
+              "id": "{{user.data.business_id}}"
+            },
+            {
+              "user_condition": {
+                "data.vendor_role": "manager"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "data.owner_user_id": "{{user.id}}"
+        },
+        {
+          "$and": [
+            {
+              "id": "{{user.data.business_id}}"
+            },
+            {
+              "user_condition": {
+                "data.vendor_role": "manager"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
 }

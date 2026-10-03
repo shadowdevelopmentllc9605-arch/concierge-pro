@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { createPageUrl } from '@/utils';
 import { DoorOpen, User, Package, Plus, Trash2, Monitor, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -177,6 +178,17 @@ export default function FittingRooms() {
                   )}
 
                   <div className="flex gap-2 mt-4">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(createPageUrl(`MirrorDisplay?room=${room.id}`), '_blank', 'noopener,noreferrer');
+                      }}
+                    >
+                      <Monitor className="w-4 h-4 mr-1" /> Open Mirror Display
+                    </Button>
                     {room.status === 'occupied' && (
                       <Button 
                         size="sm" 

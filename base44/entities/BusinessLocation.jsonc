@@ -1,45 +1,41 @@
 {
-  "name": "FittingRoom",
+  "name": "BusinessLocation",
   "type": "object",
   "properties": {
-    "room_number": {
-      "type": "string"
-    },
-    "status": {
-      "type": "string",
-      "enum": [
-        "available",
-        "occupied",
-        "cleaning"
-      ],
-      "default": "available"
-    },
-    "customer_id": {
-      "type": "string"
-    },
-    "items": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Item IDs in the room"
-    },
-    "suggested_items": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "description": "Items cast to mirror"
-    },
     "business_id": {
       "type": "string"
     },
-    "location_id": {
+    "name": {
       "type": "string"
+    },
+    "address": {
+      "type": "string"
+    },
+    "lat": {
+      "type": "number"
+    },
+    "lng": {
+      "type": "number"
+    },
+    "tax_rate": {
+      "type": "number",
+      "default": 0
+    },
+    "floor_plan_url": {
+      "type": "string"
+    },
+    "is_default": {
+      "type": "boolean",
+      "default": false
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
     }
   },
   "required": [
-    "room_number"
+    "business_id",
+    "name"
   ],
   "rls": {
     "create": {
@@ -58,7 +54,16 @@
       "data.business_id": "{{user.data.business_id}}"
     },
     "update": {
-      "data.business_id": "{{user.data.business_id}}"
+      "$and": [
+        {
+          "data.business_id": "{{user.data.business_id}}"
+        },
+        {
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
+        }
+      ]
     },
     "delete": {
       "$and": [
