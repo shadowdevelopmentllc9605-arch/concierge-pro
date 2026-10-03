@@ -77,6 +77,15 @@
     "synced_to_customer": {
       "type": "boolean",
       "default": false
+    },
+    "sync_error": {
+      "type": "string"
+    },
+    "payment_provider": {
+      "type": "string"
+    },
+    "payment_intent_id": {
+      "type": "string"
     }
   },
   "required": [
