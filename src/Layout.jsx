@@ -47,6 +47,10 @@ export default function Layout({ children, currentPageName }) {
       setUser(context.user);
       setEmployee(context.employee);
       setBusinessId(context.businessId);
+
+      if (context.businessId) {
+        base44.functions.invoke('retryIntegrationSyncs', {}).catch(() => {});
+      }
     } catch (err) {
       console.error(err);
     } finally {
