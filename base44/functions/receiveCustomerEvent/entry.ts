@@ -76,6 +76,15 @@ export default async function (req: Request): Promise<Response> {
           entered_at: now,
           status: "active",
         });
+        await base44.asServiceRole.entities.StoreAlert.create({
+          business_id: businessId,
+          location_id: locationId || "",
+          customer_id: storeCustomer.id,
+          title: "Customer entered the store",
+          message: `${customer.name} checked in and is ready for assistance.`,
+          type: "customer_entry",
+          read_by: [],
+        });
       }
 
       return Response.json({ success: true, customerId: storeCustomer.id });
@@ -101,6 +110,15 @@ export default async function (req: Request): Promise<Response> {
 
       await base44.asServiceRole.entities.StoreCustomer.update(customer.id, {
         try_on_request_items: inventoryIds,
+      });
+      await base44.asServiceRole.entities.StoreAlert.create({
+        business_id: businessId,
+        location_id: customer.location_id || "",
+        customer_id: customer.id,
+        title: "Try-on request",
+        message: `${customer.name} requested ${inventoryIds.length} item${inventoryIds.length === 1 ? "" : "s"} for try-on.`,
+        type: "try_on_request",
+        read_by: [],
       });
       return Response.json({ success: true, requestedItems: inventoryIds.length });
     }
