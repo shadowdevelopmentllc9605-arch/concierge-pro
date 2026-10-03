@@ -88,9 +88,35 @@
     },
     "business_id": {
       "type": "string"
+    },
+    "location_id": {
+      "type": "string"
     }
   },
   "required": [
     "name"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "data.business_id": "{{user.data.business_id}}"
+    },
+    "read": {
+      "data.business_id": "{{user.data.business_id}}"
+    },
+    "update": {
+      "data.business_id": "{{user.data.business_id}}"
+    },
+    "delete": {
+      "$and": [
+        {
+          "data.business_id": "{{user.data.business_id}}"
+        },
+        {
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
+        }
+      ]
+    }
+  }
 }
