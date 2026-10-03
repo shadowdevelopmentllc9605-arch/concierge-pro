@@ -60,6 +60,10 @@ import Metrics from './pages/Metrics';
 import Procedures from './pages/Procedures';
 import FittingRooms from './pages/FittingRooms';
 import Locations from './pages/Locations';
+import MirrorDisplay from './pages/MirrorDisplay';
+import EmployeeProfile from './pages/EmployeeProfile';
+import FAQ from './pages/FAQ';
+import Support from './pages/Support';
 import __Layout from './Layout.jsx';
 
 
@@ -77,6 +81,10 @@ export const PAGES = {
     "Procedures": Procedures,
     "FittingRooms": FittingRooms,
     "Locations": Locations,
+    "MirrorDisplay": MirrorDisplay,
+    "EmployeeProfile": EmployeeProfile,
+    "FAQ": FAQ,
+    "Support": Support,
 }
 
 export const pagesConfig = {
