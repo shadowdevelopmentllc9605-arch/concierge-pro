@@ -12,6 +12,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [business, setBusiness] = useState(null);
+  const [employee, setEmployee] = useState(null);
   const [stats, setStats] = useState({ customers: 0, inventory: 0, sales: 0 });
 
   const loadData = useCallback(async () => {
@@ -24,6 +25,7 @@ export default function Home() {
       }
 
       setBusiness(context.business);
+      setEmployee(context.employee);
 
       const [customers, inventory, purchases] = await Promise.all([
         base44.entities.StoreCustomer.filter({ in_store: true, business_id: context.businessId }),
@@ -66,14 +68,17 @@ export default function Home() {
     );
   }
 
+  const isManager = employee?.role === 'manager';
+  const permissions = employee?.permissions || {};
+
   const quickActions = [
-    { icon: MapPin, label: 'Floor View', page: 'FloorView', color: 'bg-violet-500' },
-    { icon: Users, label: 'Customers', page: 'Customers', color: 'bg-emerald-500' },
-    { icon: Package, label: 'Inventory', page: 'Inventory', color: 'bg-amber-500' },
-    { icon: ShoppingCart, label: 'POS', page: 'Checkout', color: 'bg-blue-500' },
-    { icon: Bell, label: 'Notifications', page: 'Notifications', color: 'bg-rose-500' },
-    { icon: Building2, label: 'Settings', page: 'BusinessSetup', color: 'bg-slate-600' }
-  ];
+    { icon: MapPin, label: 'Floor View', page: 'FloorView', color: 'bg-violet-500', show: true },
+    { icon: Users, label: 'Customers', page: 'Customers', color: 'bg-emerald-500', show: true },
+    { icon: Package, label: 'Inventory', page: 'Inventory', color: 'bg-amber-500', show: isManager || Boolean(permissions.manage_inventory) },
+    { icon: ShoppingCart, label: 'POS', page: 'Checkout', color: 'bg-blue-500', show: isManager || permissions.process_checkout !== false },
+    { icon: Bell, label: 'Notifications', page: 'Notifications', color: 'bg-rose-500', show: isManager || Boolean(permissions.send_notifications) },
+    { icon: Building2, label: 'Settings', page: 'BusinessSetup', color: 'bg-slate-600', show: isManager }
+  ].filter(action => action.show);
 
   return (
     <PullToRefresh onRefresh={loadData}>

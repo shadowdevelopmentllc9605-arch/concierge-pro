@@ -44,9 +44,9 @@ export async function getVendorContext() {
 }
 
 export function canAccessVendorPage(pageName, employee) {
-  if (pageName === 'BusinessSetup') return true;
-  if (!employee) return false;
+  if (!employee) return pageName === 'BusinessSetup';
   if (employee.role === 'manager') return true;
+  if (pageName === 'BusinessSetup') return false;
 
   const permissions = employee.permissions || {};
 

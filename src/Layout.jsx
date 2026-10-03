@@ -55,10 +55,6 @@ export default function Layout({ children, currentPageName }) {
     base44.auth.logout();
   };
 
-  if (currentPageName === 'BusinessSetup') {
-    return children;
-  }
-
   if (loadingUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
@@ -85,6 +81,12 @@ export default function Layout({ children, currentPageName }) {
 
   const isManager = employee?.role === 'manager';
   const permissions = employee?.permissions || {};
+
+  const bottomTabs = BOTTOM_TABS.filter(tab => {
+    if (tab.page === 'Checkout') return isManager || permissions.process_checkout !== false;
+    if (tab.page === 'Notifications') return isManager || Boolean(permissions.send_notifications);
+    return true;
+  });
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', page: 'Home', show: true },
@@ -226,7 +228,7 @@ export default function Layout({ children, currentPageName }) {
         className="bottom-tab-bar lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 z-40 flex"
         style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       >
-        {BOTTOM_TABS.map((tab) => {
+        {bottomTabs.map((tab) => {
           const isActive = currentPageName === tab.page;
           return (
             <Link
