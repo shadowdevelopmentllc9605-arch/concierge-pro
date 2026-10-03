@@ -81,10 +81,146 @@
     "linked_product_id": {
       "type": "string",
       "description": "ID from customer app for linking"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "tryOn_image": {
+      "type": "string",
+      "description": "Transparent garment image for customer virtual try-on"
+    },
+    "size_chart": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "string"
+          },
+          "chest_min_cm": {
+            "type": "number"
+          },
+          "chest_max_cm": {
+            "type": "number"
+          },
+          "waist_min_cm": {
+            "type": "number"
+          },
+          "waist_max_cm": {
+            "type": "number"
+          },
+          "hips_min_cm": {
+            "type": "number"
+          },
+          "hips_max_cm": {
+            "type": "number"
+          },
+          "inseam_min_cm": {
+            "type": "number"
+          },
+          "inseam_max_cm": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "sku": {
+            "type": "string"
+          },
+          "stock_quantity": {
+            "type": "number",
+            "default": 0
+          }
+        }
+      }
     }
   },
   "required": [
     "name",
     "price"
-  ]
+  ],
+  "rls": {
+    "create": {
+      "$and": [
+        {
+          "data.business_id": "{{user.data.business_id}}"
+        },
+        {
+          "$or": [
+            {
+              "user_condition": {
+                "data.vendor_role": "manager"
+              }
+            },
+            {
+              "user_condition": {
+                "data.vendor_permissions.manage_inventory": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "read": {
+      "data.business_id": "{{user.data.business_id}}"
+    },
+    "update": {
+      "$and": [
+        {
+          "data.business_id": "{{user.data.business_id}}"
+        },
+        {
+          "$or": [
+            {
+              "user_condition": {
+                "data.vendor_role": "manager"
+              }
+            },
+            {
+              "user_condition": {
+                "data.vendor_permissions.manage_inventory": true
+              }
+            },
+            {
+              "user_condition": {
+                "data.vendor_permissions.edit_floor_plan": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "delete": {
+      "$and": [
+        {
+          "data.business_id": "{{user.data.business_id}}"
+        },
+        {
+          "$or": [
+            {
+              "user_condition": {
+                "data.vendor_role": "manager"
+              }
+            },
+            {
+              "user_condition": {
+                "data.vendor_permissions.manage_inventory": true
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
 }
