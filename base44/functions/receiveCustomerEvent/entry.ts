@@ -123,6 +123,126 @@ export default async function (req: Request): Promise<Response> {
       return Response.json({ success: true, requestedItems: inventoryIds.length });
     }
 
+    if (action === "onlinePurchase") {
+      const { businessId, externalOrderId, customer, items = [] } = body;
+      if (!businessId || !externalOrderId || !customer?.user_id || !items.length) {
+        return Response.json({ error: "Missing online purchase data" }, { status: 400 });
+      }
+
+      const duplicate = await base44.asServiceRole.entities.Purchase.filter({
+        business_id: businessId,
+        external_purchase_id: externalOrderId,
+      });
+      if (duplicate[0]) {
+        return Response.json({ success: true, duplicate: true, purchaseId: duplicate[0].id });
+      }
+
+      const customerMatches = await base44.asServiceRole.entities.StoreCustomer.filter({
+        linked_customer_id: customer.user_id,
+        business_id: businessId,
+      });
+
+      let storeCustomer = customerMatches[0] || null;
+      if (!storeCustomer) {
+        storeCustomer = await base44.asServiceRole.entities.StoreCustomer.create({
+          name: customer.name || customer.email || "Online customer",
+          email: customer.email || "",
+          linked_customer_id: customer.user_id,
+          in_store: false,
+          business_id: businessId,
+          total_spent: 0,
+          visit_count: 0,
+        });
+      }
+
+      const purchaseItems = [];
+      let subtotal = 0;
+      const warnings: string[] = [];
+
+      for (const incoming of items) {
+        const inventoryMatches = await base44.asServiceRole.entities.InventoryItem.filter({
+          linked_product_id: incoming.product_id,
+          business_id: businessId,
+        });
+        const inventory = inventoryMatches[0];
+        if (!inventory) {
+          warnings.push(`Inventory mapping missing for ${incoming.name || incoming.product_id}`);
+          continue;
+        }
+
+        const quantity = Math.max(1, Math.floor(Number(incoming.quantity || 1)));
+        const price = Number(incoming.price ?? inventory.price ?? 0);
+        subtotal += price * quantity;
+
+        const update: any = {};
+        if (Array.isArray(inventory.variants) && inventory.variants.length > 0) {
+          let matched = false;
+          update.variants = inventory.variants.map((variant: any) => {
+            if (
+              String(variant.size || "") === String(incoming.size || "") &&
+              String(variant.color || "") === String(incoming.color || "")
+            ) {
+              matched = true;
+              const before = Math.max(0, Number(variant.stock_quantity || 0));
+              if (quantity > before) warnings.push(`Oversold ${inventory.name} ${incoming.size || ""} ${incoming.color || ""}`.trim());
+              return { ...variant, stock_quantity: Math.max(0, before - quantity) };
+            }
+            return variant;
+          });
+          if (!matched) warnings.push(`Variant mapping missing for ${inventory.name}`);
+          update.stock_quantity = update.variants.reduce(
+            (sum: number, variant: any) => sum + Math.max(0, Number(variant.stock_quantity || 0)),
+            0,
+          );
+        } else {
+          const before = Math.max(0, Number(inventory.stock_quantity || 0));
+          if (quantity > before) warnings.push(`Oversold ${inventory.name}`);
+          update.stock_quantity = Math.max(0, before - quantity);
+        }
+
+        await base44.asServiceRole.entities.InventoryItem.update(inventory.id, update);
+        purchaseItems.push({
+          inventory_item_id: inventory.id,
+          name: inventory.name,
+          quantity,
+          price,
+          size: incoming.size || "",
+          color: incoming.color || "",
+        });
+      }
+
+      if (!purchaseItems.length) {
+        return Response.json({ error: "No linked vendor inventory items were found" }, { status: 409 });
+      }
+
+      const purchase = await base44.asServiceRole.entities.Purchase.create({
+        customer_id: storeCustomer.id,
+        employee_id: "",
+        items: purchaseItems,
+        subtotal,
+        tax: 0,
+        discount: 0,
+        total: subtotal,
+        payment_method: "credit_card",
+        payment_provider: "stripe",
+        status: "completed",
+        business_id: businessId,
+        external_purchase_id: externalOrderId,
+        synced_to_customer: true,
+      });
+
+      await base44.asServiceRole.entities.StoreCustomer.update(storeCustomer.id, {
+        total_spent: Number(storeCustomer.total_spent || 0) + subtotal,
+        last_visit: new Date().toISOString(),
+      });
+
+      return Response.json({
+        success: true,
+        purchaseId: purchase.id,
+        warnings,
+      });
+    }
+
     if (action === "checkout") {
       const { businessId, externalCheckinId, customerId } = body;
       const customers = await base44.asServiceRole.entities.StoreCustomer.filter({
