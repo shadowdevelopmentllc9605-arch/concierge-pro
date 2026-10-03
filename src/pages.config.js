@@ -64,6 +64,7 @@ import MirrorDisplay from './pages/MirrorDisplay';
 import EmployeeProfile from './pages/EmployeeProfile';
 import FAQ from './pages/FAQ';
 import Support from './pages/Support';
+import Payroll from './pages/Payroll';
 import __Layout from './Layout.jsx';
 
 
@@ -85,6 +86,7 @@ export const PAGES = {
     "EmployeeProfile": EmployeeProfile,
     "FAQ": FAQ,
     "Support": Support,
+    "Payroll": Payroll,
 }
 
 export const pagesConfig = {
