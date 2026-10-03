@@ -84,7 +84,12 @@ export default function CustomerDetail() {
   const assignEmployee = async (employeeId) => {
     if (!isManager && employeeId !== currentEmployee?.id) return;
     try {
-      await base44.entities.StoreCustomer.update(customerId, { assigned_employee_id: employeeId });
+      const response = await base44.functions.invoke('assignCustomer', {
+        customerId,
+        employeeId
+      });
+      const result = response?.data || response;
+      if (!result?.success) throw new Error(result?.error || 'Customer assignment failed.');
       setCustomer(prev => ({ ...prev, assigned_employee_id: employeeId }));
     } catch (err) {
       console.error(err);
