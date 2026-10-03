@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { sharedBackendBridge } from '@/lib/sharedBackendBridge';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Search, Plus, Minus, User, CreditCard, Banknote, Smartphone, Receipt, Loader2, Package, X, Check, AlertTriangle } from 'lucide-react';
@@ -158,7 +159,7 @@ export default function Checkout() {
         business.default_location_id ||
         '';
 
-      const response = await base44.functions.invoke('recordSale', {
+      const result = await sharedBackendBridge.recordSale({
         customerId: selectedCustomer.id,
         locationId,
         paymentMethod,
@@ -171,7 +172,6 @@ export default function Checkout() {
           color: item.selectedColor || ''
         }))
       });
-      const result = response?.data || response;
 
       if (!result?.success) {
         throw new Error(result?.error || 'The sale could not be recorded.');
