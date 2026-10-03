@@ -119,38 +119,14 @@ export default function BusinessSetup() {
       return;
     }
 
-    if (!business?.id) return;
-
     try {
-      const [
-        employees,
-        inventory,
-        customers,
-        purchases,
-        notifications,
-        fittingRooms
-      ] = await Promise.all([
-        base44.entities.Employee.filter({ business_id: business.id }),
-        base44.entities.InventoryItem.filter({ business_id: business.id }),
-        base44.entities.StoreCustomer.filter({ business_id: business.id }),
-        base44.entities.Purchase.filter({ business_id: business.id }),
-        base44.entities.CustomerNotification.filter({ business_id: business.id }),
-        base44.entities.FittingRoom.filter({ business_id: business.id })
-      ]);
-
-      await Promise.all([
-        ...notifications.map(record => base44.entities.CustomerNotification.delete(record.id)),
-        ...purchases.map(record => base44.entities.Purchase.delete(record.id)),
-        ...fittingRooms.map(record => base44.entities.FittingRoom.delete(record.id)),
-        ...customers.map(record => base44.entities.StoreCustomer.delete(record.id)),
-        ...inventory.map(record => base44.entities.InventoryItem.delete(record.id)),
-        ...employees.map(record => base44.entities.Employee.delete(record.id))
-      ]);
-
-      await base44.entities.Business.delete(business.id);
+      const response = await base44.functions.invoke('deleteVendorBusiness', {});
+      const result = response?.data || response;
+      if (!result?.success) throw new Error(result?.error || 'Business data could not be deleted.');
       base44.auth.logout();
     } catch (err) {
       console.error(err);
+      alert(err?.response?.data?.error || err?.message || 'Business data could not be deleted.');
     }
   };
 
