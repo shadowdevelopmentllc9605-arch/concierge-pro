@@ -86,6 +86,10 @@
     },
     "payment_intent_id": {
       "type": "string"
+    },
+    "shipping": {
+      "type": "number",
+      "default": 0
     }
   },
   "required": [
