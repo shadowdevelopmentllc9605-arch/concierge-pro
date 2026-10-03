@@ -144,6 +144,18 @@
           }
         }
       }
+    },
+    "brand": {
+      "type": "string"
+    },
+    "style_type": {
+      "type": "string",
+      "enum": [
+        "business",
+        "casual",
+        "nightlife",
+        "trendy"
+      ]
     }
   },
   "required": [
