@@ -2,17 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Search, Plus, Minus, Trash2, User, CreditCard, Banknote, Smartphone, Receipt, Loader2, Package, X, Check } from 'lucide-react';
+import { Search, Plus, Minus, User, CreditCard, Banknote, Smartphone, Receipt, Loader2, Package, X, Check, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function Checkout() {
   const navigate = useNavigate();
-  const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,7 +21,10 @@ export default function Checkout() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [search, setSearch] = useState('');
   const [discount, setDiscount] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('credit_card');
+  const [business, setBusiness] = useState(null);
+  const [employee, setEmployee] = useState(null);
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [showSuccess, setShowSuccess] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -33,15 +36,25 @@ export default function Checkout() {
 
   const loadData = async () => {
     try {
+      const context = await getVendorContext();
+      setBusiness(context.business);
+      setEmployee(context.employee);
+
+      if (!context.businessId) {
+        setInventory([]);
+        setCustomers([]);
+        return;
+      }
+
       const [inventoryData, customersData] = await Promise.all([
-        base44.entities.InventoryItem.list(),
-        base44.entities.StoreCustomer.list()
+        base44.entities.InventoryItem.filter({ business_id: context.businessId }),
+        base44.entities.StoreCustomer.filter({ business_id: context.businessId })
       ]);
       setInventory(inventoryData);
       setCustomers(customersData);
-      
+
       if (preselectedCustomerId) {
-        const customer = customersData.find(c => c.id === preselectedCustomerId);
+        const customer = customersData.find(record => record.id === preselectedCustomerId);
         if (customer) setSelectedCustomer(customer);
       }
     } catch (err) {
@@ -52,22 +65,33 @@ export default function Checkout() {
   };
 
   const addToCart = (item) => {
-    const existing = cart.find(c => c.id === item.id);
+    if ((item.stock_quantity || 0) <= 0) return;
+
+    const existing = cart.find(cartItem => cartItem.id === item.id);
     if (existing) {
-      setCart(cart.map(c => c.id === item.id ? { ...c, quantity: c.quantity + 1 } : c));
+      if (existing.quantity >= (item.stock_quantity || 0)) return;
+      setCart(cart.map(cartItem =>
+        cartItem.id === item.id
+          ? { ...cartItem, quantity: cartItem.quantity + 1 }
+          : cartItem
+      ));
     } else {
       setCart([...cart, { ...item, quantity: 1 }]);
     }
   };
 
   const updateQuantity = (itemId, delta) => {
-    setCart(cart.map(c => {
-      if (c.id === itemId) {
-        const newQty = c.quantity + delta;
-        return newQty > 0 ? { ...c, quantity: newQty } : c;
-      }
-      return c;
-    }).filter(c => c.quantity > 0));
+    setCart(cart
+      .map(cartItem => {
+        if (cartItem.id !== itemId) return cartItem;
+
+        const newQty = cartItem.quantity + delta;
+        if (newQty <= 0) return { ...cartItem, quantity: 0 };
+        if (newQty > (cartItem.stock_quantity || 0)) return cartItem;
+
+        return { ...cartItem, quantity: newQty };
+      })
+      .filter(cartItem => cartItem.quantity > 0));
   };
 
   const removeFromCart = (itemId) => {
@@ -76,16 +100,31 @@ export default function Checkout() {
 
   const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   const discountAmount = subtotal * (discount / 100);
-  const tax = (subtotal - discountAmount) * 0.08;
+  const taxRate = Math.max(0, Number(business?.tax_rate) || 0);
+  const tax = (subtotal - discountAmount) * (taxRate / 100);
   const total = subtotal - discountAmount + tax;
 
   const processPayment = async () => {
-    if (!selectedCustomer || cart.length === 0) return;
-    
+    if (!selectedCustomer || cart.length === 0 || !business?.id) return;
+
+    if (paymentMethod !== 'cash') {
+      setPaymentError('Card and mobile payments require a connected payment processor. No charge was attempted.');
+      return;
+    }
+
+    const insufficientStock = cart.find(item => item.quantity > (item.stock_quantity || 0));
+    if (insufficientStock) {
+      setPaymentError(`Not enough stock is available for ${insufficientStock.name}.`);
+      return;
+    }
+
+    setPaymentError('');
     setProcessing(true);
     try {
-      const purchase = await base44.entities.Purchase.create({
+      await base44.entities.Purchase.create({
         customer_id: selectedCustomer.id,
+        employee_id: employee?.id || '',
+        business_id: business.id,
         items: cart.map(item => ({
           inventory_item_id: item.id,
           name: item.name,
@@ -96,27 +135,28 @@ export default function Checkout() {
         tax,
         discount: discountAmount,
         total,
-        payment_method: paymentMethod,
+        payment_method: 'cash',
         status: 'completed'
       });
 
-      // Update inventory stock
       await Promise.all(cart.map(item =>
         base44.entities.InventoryItem.update(item.id, {
-          stock_quantity: (item.stock_quantity || 0) - item.quantity
+          stock_quantity: Math.max(0, (item.stock_quantity || 0) - item.quantity)
         })
       ));
 
-      // Update customer stats
+      const purchasedIds = new Set(cart.map(item => item.id));
       await base44.entities.StoreCustomer.update(selectedCustomer.id, {
         total_spent: (selectedCustomer.total_spent || 0) + total,
-        last_visit: new Date().toISOString()
+        last_visit: new Date().toISOString(),
+        wishlist_items: (selectedCustomer.wishlist_items || []).filter(id => !purchasedIds.has(id))
       });
 
       setShowSuccess(true);
       setCart([]);
     } catch (err) {
       console.error(err);
+      setPaymentError('The sale could not be recorded. Inventory was not intentionally marked complete by the UI.');
     } finally {
       setProcessing(false);
     }
@@ -157,7 +197,7 @@ export default function Checkout() {
             {filteredInventory.map((item) => (
               <Card
                 key={item.id}
-                className="bg-slate-800 border-slate-700 cursor-pointer hover:bg-slate-700 transition overflow-hidden"
+                className={`bg-slate-800 border-slate-700 transition overflow-hidden ${(item.stock_quantity || 0) > 0 ? "cursor-pointer hover:bg-slate-700" : "cursor-not-allowed opacity-80"}`}
                 onClick={() => addToCart(item)}
               >
                 <div className="aspect-square relative">
@@ -261,7 +301,7 @@ export default function Checkout() {
                 </div>
               )}
               <div className="flex justify-between text-sm">
-                <span>Tax (8%)</span>
+                <span>Tax ({taxRate.toFixed(2)}%)</span>
                 <span>${tax.toFixed(2)}</span>
               </div>
               <Separator />
@@ -271,11 +311,23 @@ export default function Checkout() {
               </div>
             </div>
 
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 mb-4 flex gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-900">
+                Cash sales can be recorded now. Card and mobile payment buttons remain disabled until a real processor is connected.
+              </p>
+            </div>
+
+            {paymentError && (
+              <p className="text-sm text-red-600 mb-3">{paymentError}</p>
+            )}
+
             <div className="flex gap-2 mb-4">
               <Button
-                variant={paymentMethod === 'credit_card' ? 'default' : 'outline'}
+                variant="outline"
                 className="flex-1"
-                onClick={() => setPaymentMethod('credit_card')}
+                disabled
+                title="Connect a payment processor to enable card payments"
               >
                 <CreditCard className="w-4 h-4 mr-1" /> Card
               </Button>
@@ -287,9 +339,10 @@ export default function Checkout() {
                 <Banknote className="w-4 h-4 mr-1" /> Cash
               </Button>
               <Button
-                variant={paymentMethod === 'mobile_pay' ? 'default' : 'outline'}
+                variant="outline"
                 className="flex-1"
-                onClick={() => setPaymentMethod('mobile_pay')}
+                disabled
+                title="Connect a payment processor to enable mobile payments"
               >
                 <Smartphone className="w-4 h-4 mr-1" /> Mobile
               </Button>
@@ -301,7 +354,7 @@ export default function Checkout() {
               onClick={processPayment}
             >
               {processing ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-              Complete Payment
+              Complete Cash Sale
             </Button>
           </div>
         </div>
@@ -314,8 +367,8 @@ export default function Checkout() {
             <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <Check className="w-10 h-10 text-emerald-600" />
             </div>
-            <DialogTitle className="text-2xl mb-2">Payment Successful!</DialogTitle>
-            <p className="text-slate-500 mb-6">Transaction completed for ${total.toFixed(2)}</p>
+            <DialogTitle className="text-2xl mb-2">Cash Sale Recorded</DialogTitle>
+            <p className="text-slate-500 mb-6">Cash transaction recorded for ${total.toFixed(2)}</p>
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setShowSuccess(false)}>
                 New Order

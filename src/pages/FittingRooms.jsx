@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { DoorOpen, User, Package, Plus, Trash2, Monitor, Loader2, X } from 'lucide-react';
+import { DoorOpen, User, Package, Plus, Trash2, Monitor, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function FittingRooms() {
   const [rooms, setRooms] = useState([]);
@@ -15,6 +16,8 @@ export default function FittingRooms() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newRoomNumber, setNewRoomNumber] = useState('');
   const [selectedRoom, setSelectedRoom] = useState(null);
+  const [businessId, setBusinessId] = useState(null);
+  const [canManageRooms, setCanManageRooms] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -22,10 +25,21 @@ export default function FittingRooms() {
 
   const loadData = async () => {
     try {
+      const context = await getVendorContext();
+      setBusinessId(context.businessId);
+      setCanManageRooms(context.isManager);
+
+      if (!context.businessId) {
+        setRooms([]);
+        setCustomers([]);
+        setInventory([]);
+        return;
+      }
+
       const [roomsData, customersData, inventoryData] = await Promise.all([
-        base44.entities.FittingRoom.list(),
-        base44.entities.StoreCustomer.list(),
-        base44.entities.InventoryItem.list()
+        base44.entities.FittingRoom.filter({ business_id: context.businessId }),
+        base44.entities.StoreCustomer.filter({ business_id: context.businessId }),
+        base44.entities.InventoryItem.filter({ business_id: context.businessId })
       ]);
       setRooms(roomsData);
       setCustomers(customersData);
@@ -38,11 +52,12 @@ export default function FittingRooms() {
   };
 
   const addRoom = async () => {
-    if (!newRoomNumber.trim()) return;
+    if (!newRoomNumber.trim() || !businessId) return;
     try {
       await base44.entities.FittingRoom.create({
         room_number: newRoomNumber,
-        status: 'available'
+        status: 'available',
+        business_id: businessId
       });
       setNewRoomNumber('');
       setDialogOpen(false);
@@ -102,9 +117,11 @@ export default function FittingRooms() {
             <h1 className="text-3xl font-bold text-slate-900">Fitting Rooms</h1>
             <p className="text-slate-500">{rooms.filter(r => r.status === 'available').length} available</p>
           </div>
-          <Button onClick={() => setDialogOpen(true)} className="bg-violet-600 hover:bg-violet-700">
-            <Plus className="w-4 h-4 mr-2" /> Add Room
-          </Button>
+          {canManageRooms && (
+            <Button onClick={() => setDialogOpen(true)} className="bg-violet-600 hover:bg-violet-700">
+              <Plus className="w-4 h-4 mr-2" /> Add Room
+            </Button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

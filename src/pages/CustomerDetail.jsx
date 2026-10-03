@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function CustomerDetail() {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ export default function CustomerDetail() {
   const [fittingRooms, setFittingRooms] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentEmployee, setCurrentEmployee] = useState(null);
+  const [isManager, setIsManager] = useState(false);
 
   const urlParams = new URLSearchParams(window.location.search);
   const customerId = urlParams.get('id');
@@ -27,22 +30,49 @@ export default function CustomerDetail() {
 
   const loadData = async () => {
     try {
-      const [customerData, purchasesData, itemsData, roomsData, employeesData] = await Promise.all([
-        base44.entities.StoreCustomer.list().then(arr => arr.find(c => c.id === customerId)),
-        base44.entities.Purchase.filter({ customer_id: customerId }),
-        base44.entities.InventoryItem.list(),
-        base44.entities.FittingRoom.filter({ status: 'available' }),
-        base44.entities.Employee.list()
+      const context = await getVendorContext();
+
+      if (!context.businessId) {
+        setCustomer(null);
+        return;
+      }
+
+      setCurrentEmployee(context.employee);
+      setIsManager(context.isManager);
+
+      const [customerMatches, purchasesData, itemsData, roomsData, employeesData] = await Promise.all([
+        base44.entities.StoreCustomer.filter({ id: customerId, business_id: context.businessId }),
+        base44.entities.Purchase.filter({ customer_id: customerId, business_id: context.businessId }),
+        base44.entities.InventoryItem.filter({ business_id: context.businessId }),
+        base44.entities.FittingRoom.filter({ business_id: context.businessId }),
+        base44.entities.Employee.filter({ business_id: context.businessId })
       ]);
-      
+
+      const customerData = customerMatches[0] || null;
+      const canWorkWithCustomer =
+        context.isManager ||
+        !customerData?.assigned_employee_id ||
+        customerData.assigned_employee_id === context.employee?.id;
+
+      if (!canWorkWithCustomer) {
+        setCustomer(null);
+        setPurchases([]);
+        setWishlistItems([]);
+        setFittingRooms([]);
+        setEmployees([]);
+        return;
+      }
+
       setCustomer(customerData);
       setPurchases(purchasesData);
       setFittingRooms(roomsData);
       setEmployees(employeesData);
 
       if (customerData?.wishlist_items) {
-        const wishlist = itemsData.filter(i => customerData.wishlist_items.includes(i.id));
+        const wishlist = itemsData.filter(item => customerData.wishlist_items.includes(item.id));
         setWishlistItems(wishlist);
+      } else {
+        setWishlistItems([]);
       }
     } catch (err) {
       console.error(err);
@@ -52,6 +82,7 @@ export default function CustomerDetail() {
   };
 
   const assignEmployee = async (employeeId) => {
+    if (!isManager && employeeId !== currentEmployee?.id) return;
     try {
       await base44.entities.StoreCustomer.update(customerId, { assigned_employee_id: employeeId });
       setCustomer(prev => ({ ...prev, assigned_employee_id: employeeId }));
@@ -77,7 +108,7 @@ export default function CustomerDetail() {
     }
   };
 
-  const castToMirror = async (itemId) => {
+  const queueMirrorSuggestion = async (itemId) => {
     if (!customer.fitting_room) return;
     try {
       const room = fittingRooms.find(r => r.room_number === customer.fitting_room);
@@ -176,16 +207,28 @@ export default function CustomerDetail() {
               {/* Assign Employee */}
               <div className="mt-6">
                 <p className="text-sm text-slate-500 mb-2">Assigned To</p>
-                <Select value={customer.assigned_employee_id || ''} onValueChange={assignEmployee}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select employee" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {employees.map(emp => (
-                      <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {isManager ? (
+                  <Select value={customer.assigned_employee_id || ''} onValueChange={assignEmployee}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select employee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {employees.map(emp => (
+                        <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : customer.assigned_employee_id === currentEmployee?.id ? (
+                  <Badge className="bg-emerald-100 text-emerald-700">Assigned to you</Badge>
+                ) : (
+                  <Button
+                    variant="outline"
+                    onClick={() => currentEmployee?.id && assignEmployee(currentEmployee.id)}
+                    disabled={!currentEmployee?.id}
+                  >
+                    Assign to me
+                  </Button>
+                )}
               </div>
 
               {/* Fitting Room */}
@@ -202,7 +245,7 @@ export default function CustomerDetail() {
                         <SelectValue placeholder="Assign fitting room" />
                       </SelectTrigger>
                       <SelectContent>
-                        {fittingRooms.map(room => (
+                        {fittingRooms.filter(room => room.status === 'available').map(room => (
                           <SelectItem key={room.id} value={room.room_number}>Room {room.room_number}</SelectItem>
                         ))}
                       </SelectContent>
@@ -219,7 +262,7 @@ export default function CustomerDetail() {
             <Card className="border-0 shadow-xl">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Heart className="w-5 h-5 text-rose-500" /> Wishlist Items
+                  <Heart className="w-5 h-5 text-rose-500" /> Store Wishlist Items
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -244,8 +287,8 @@ export default function CustomerDetail() {
                           )}
                         </div>
                         {customer.fitting_room && (
-                          <Button size="sm" variant="outline" onClick={() => castToMirror(item.id)}>
-                            <Send className="w-3 h-3 mr-1" /> Cast to Mirror
+                          <Button size="sm" variant="outline" onClick={() => queueMirrorSuggestion(item.id)}>
+                            <Send className="w-3 h-3 mr-1" /> Add to Mirror Queue
                           </Button>
                         )}
                       </div>

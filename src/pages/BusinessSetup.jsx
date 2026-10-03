@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Building2, Upload, Image, MapPin, Check, ArrowRight, Loader2, Trash2 } from 'lucide-react';
+import { Building2, Upload, MapPin, Check, ArrowRight, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { MANAGER_PERMISSIONS } from '@/lib/vendorContext';
 
 export default function BusinessSetup() {
   const navigate = useNavigate();
@@ -23,6 +24,7 @@ export default function BusinessSetup() {
     address: '',
     phone: '',
     email: '',
+    tax_rate: '0',
     open_procedures: '',
     close_procedures: '',
     linked_customer_app_id: ''
@@ -34,11 +36,33 @@ export default function BusinessSetup() {
 
   const loadBusiness = async () => {
     try {
-      const businesses = await base44.entities.Business.list();
+      const userData = await base44.auth.me();
+      let businesses = await base44.entities.Business.filter({ owner_user_id: userData.id });
+
+      if (businesses.length === 0 && userData.email) {
+        businesses = await base44.entities.Business.filter({ owner_email: userData.email });
+      }
+
+      if (businesses.length === 0) {
+        const legacyBusinesses = await base44.entities.Business.list();
+        if (
+          legacyBusinesses.length === 1 &&
+          !legacyBusinesses[0].owner_user_id &&
+          !legacyBusinesses[0].owner_email
+        ) {
+          businesses = legacyBusinesses;
+        }
+      }
+
       if (businesses.length > 0) {
-        setBusiness(businesses[0]);
-        setForm(businesses[0]);
-        if (businesses[0].setup_complete) setStep(4);
+        const existing = businesses[0];
+        setBusiness(existing);
+        setForm(prev => ({
+          ...prev,
+          ...existing,
+          tax_rate: existing.tax_rate?.toString() || '0',
+        }));
+        if (existing.setup_complete) setStep(4);
       }
     } catch (err) {
       console.error(err);
@@ -61,12 +85,42 @@ export default function BusinessSetup() {
   const saveProgress = async () => {
     setSaving(true);
     try {
-      const data = { ...form, setup_complete: step >= 3 };
+      const userData = await base44.auth.me();
+      const data = {
+        ...form,
+        tax_rate: Math.max(0, parseFloat(form.tax_rate) || 0),
+        owner_user_id: userData.id,
+        owner_email: userData.email,
+        setup_complete: step >= 3,
+      };
+
+      let savedBusiness = business;
       if (business) {
         await base44.entities.Business.update(business.id, data);
+        savedBusiness = { ...business, ...data };
+        setBusiness(savedBusiness);
       } else {
-        const newBiz = await base44.entities.Business.create(data);
-        setBusiness(newBiz);
+        savedBusiness = await base44.entities.Business.create(data);
+        setBusiness(savedBusiness);
+      }
+
+      const employees = await base44.entities.Employee.filter({ email: userData.email });
+      const existingManager = employees[0];
+
+      const managerData = {
+        user_id: userData.id,
+        name: userData.full_name || userData.name || userData.email,
+        email: userData.email,
+        role: 'manager',
+        permissions: MANAGER_PERMISSIONS,
+        status: 'active',
+        business_id: savedBusiness.id,
+      };
+
+      if (existingManager) {
+        await base44.entities.Employee.update(existingManager.id, managerData);
+      } else {
+        await base44.entities.Employee.create(managerData);
       }
     } catch (err) {
       console.error(err);
@@ -80,8 +134,36 @@ export default function BusinessSetup() {
       setDeleteConfirm(true);
       return;
     }
+
+    if (!business?.id) return;
+
     try {
-      if (business) await base44.entities.Business.delete(business.id);
+      const [
+        employees,
+        inventory,
+        customers,
+        purchases,
+        notifications,
+        fittingRooms
+      ] = await Promise.all([
+        base44.entities.Employee.filter({ business_id: business.id }),
+        base44.entities.InventoryItem.filter({ business_id: business.id }),
+        base44.entities.StoreCustomer.filter({ business_id: business.id }),
+        base44.entities.Purchase.filter({ business_id: business.id }),
+        base44.entities.CustomerNotification.filter({ business_id: business.id }),
+        base44.entities.FittingRoom.filter({ business_id: business.id })
+      ]);
+
+      await Promise.all([
+        ...notifications.map(record => base44.entities.CustomerNotification.delete(record.id)),
+        ...purchases.map(record => base44.entities.Purchase.delete(record.id)),
+        ...fittingRooms.map(record => base44.entities.FittingRoom.delete(record.id)),
+        ...customers.map(record => base44.entities.StoreCustomer.delete(record.id)),
+        ...inventory.map(record => base44.entities.InventoryItem.delete(record.id)),
+        ...employees.map(record => base44.entities.Employee.delete(record.id))
+      ]);
+
+      await base44.entities.Business.delete(business.id);
       base44.auth.logout();
     } catch (err) {
       console.error(err);
@@ -200,13 +282,30 @@ export default function BusinessSetup() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Sales Tax Rate (%)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.tax_rate}
+                    onChange={(e) => setForm({ ...form, tax_rate: e.target.value })}
+                    placeholder="7.25"
+                  />
+                  <p className="text-xs text-slate-500">
+                    Used for the current single-location POS. Multi-location tax rules require per-location configuration.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
                   <Label>Link to Customer App (Optional)</Label>
                   <Input
                     value={form.linked_customer_app_id}
                     onChange={(e) => setForm({ ...form, linked_customer_app_id: e.target.value })}
                     placeholder="Customer Concierge App ID"
                   />
-                  <p className="text-xs text-slate-500">Connect to your customer-facing Concierge app</p>
+                  <p className="text-xs text-slate-500">
+                    Stores the customer-app identifier only. Cross-app synchronization still requires the shared backend/API integration.
+                  </p>
                 </div>
               </>
             )}
@@ -333,7 +432,7 @@ export default function BusinessSetup() {
                 )}
                 {deleteConfirm && (
                   <p className="text-xs text-red-500 text-center mt-2">
-                    This will permanently delete your business data and log you out.
+                    This deletes the vendor records Concierge Pro can address and logs you out. Your Base44 sign-in account and previously uploaded files may require separate platform-level deletion.
                   </p>
                 )}
               </div>

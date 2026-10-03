@@ -6,6 +6,7 @@ import { Building2, Users, Package, ShoppingCart, Bell, MapPin, Loader2 } from '
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import PullToRefresh from '@/components/ui/PullToRefresh';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -15,23 +16,38 @@ export default function Home() {
 
   const loadData = useCallback(async () => {
     try {
-      const businesses = await base44.entities.Business.list();
-      if (businesses.length === 0 || !businesses[0].setup_complete) {
+      const context = await getVendorContext();
+
+      if (!context.business || !context.businessId || !context.business.setup_complete) {
         navigate(createPageUrl('BusinessSetup'));
         return;
       }
-      setBusiness(businesses[0]);
+
+      setBusiness(context.business);
 
       const [customers, inventory, purchases] = await Promise.all([
-        base44.entities.StoreCustomer.filter({ in_store: true }),
-        base44.entities.InventoryItem.list(),
-        base44.entities.Purchase.filter({ status: 'completed' })
+        base44.entities.StoreCustomer.filter({ in_store: true, business_id: context.businessId }),
+        base44.entities.InventoryItem.filter({ business_id: context.businessId }),
+        base44.entities.Purchase.filter({ status: 'completed', business_id: context.businessId })
       ]);
+
+      const today = new Date();
+      const todaySales = purchases
+        .filter(purchase => {
+          if (!purchase.created_date) return false;
+          const created = new Date(purchase.created_date);
+          return (
+            created.getFullYear() === today.getFullYear() &&
+            created.getMonth() === today.getMonth() &&
+            created.getDate() === today.getDate()
+          );
+        })
+        .reduce((sum, purchase) => sum + (purchase.total || 0), 0);
 
       setStats({
         customers: customers.length,
         inventory: inventory.length,
-        sales: purchases.reduce((sum, p) => sum + (p.total || 0), 0)
+        sales: todaySales
       });
     } catch (err) {
       console.error(err);

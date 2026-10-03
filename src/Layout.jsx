@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeProvider } from '@/components/ui/ThemeProvider';
+import { canAccessVendorPage, getVendorContext } from '@/lib/vendorContext';
 
 const pageVariants = {
   initial: { opacity: 0, x: 24 },
@@ -32,6 +33,7 @@ export default function Layout({ children, currentPageName }) {
   const [user, setUser] = useState(null);
   const [employee, setEmployee] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [loadingUser, setLoadingUser] = useState(true);
 
   useEffect(() => {
     loadUser();
@@ -39,12 +41,13 @@ export default function Layout({ children, currentPageName }) {
 
   const loadUser = async () => {
     try {
-      const userData = await base44.auth.me();
-      setUser(userData);
-      const employees = await base44.entities.Employee.filter({ email: userData.email });
-      if (employees.length > 0) setEmployee(employees[0]);
+      const context = await getVendorContext();
+      setUser(context.user);
+      setEmployee(context.employee);
     } catch (err) {
       console.error(err);
+    } finally {
+      setLoadingUser(false);
     }
   };
 
@@ -54,6 +57,30 @@ export default function Layout({ children, currentPageName }) {
 
   if (currentPageName === 'BusinessSetup') {
     return children;
+  }
+
+  if (loadingUser) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="text-sm text-slate-500">Loading vendor access…</div>
+      </div>
+    );
+  }
+
+  if (!canAccessVendorPage(currentPageName, employee)) {
+    return (
+      <ThemeProvider>
+        <div className="min-h-screen flex items-center justify-center bg-slate-100 p-6">
+          <div className="max-w-md bg-white rounded-2xl shadow-lg p-8 text-center">
+            <Building2 className="w-10 h-10 text-violet-600 mx-auto mb-4" />
+            <h1 className="text-xl font-semibold text-slate-900 mb-2">Access restricted</h1>
+            <p className="text-slate-600">
+              Your employee profile does not have permission to open this part of Concierge Pro.
+            </p>
+          </div>
+        </div>
+      </ThemeProvider>
+    );
   }
 
   const isManager = employee?.role === 'manager';

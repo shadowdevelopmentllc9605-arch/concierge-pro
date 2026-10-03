@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function Inventory() {
   const [items, setItems] = useState([]);
@@ -17,6 +18,7 @@ export default function Inventory() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [businessId, setBusinessId] = useState(null);
   const [form, setForm] = useState({
     name: '',
     sku: '',
@@ -28,7 +30,11 @@ export default function Inventory() {
     low_stock_threshold: '5',
     images: [],
     sizes: '',
-    colors: ''
+    colors: '',
+    dimension_width: '',
+    dimension_height: '',
+    dimension_depth: '',
+    dimension_unit: 'inches'
   });
 
   useEffect(() => {
@@ -37,7 +43,15 @@ export default function Inventory() {
 
   const loadItems = useCallback(async () => {
     try {
-      const data = await base44.entities.InventoryItem.list();
+      const context = await getVendorContext();
+      setBusinessId(context.businessId);
+
+      if (!context.businessId) {
+        setItems([]);
+        return;
+      }
+
+      const data = await base44.entities.InventoryItem.filter({ business_id: context.businessId });
       setItems(data);
     } catch (err) {
       console.error(err);
@@ -82,7 +96,11 @@ export default function Inventory() {
         low_stock_threshold: item.low_stock_threshold?.toString() || '5',
         images: item.images || [],
         sizes: item.sizes?.join(', ') || '',
-        colors: item.colors?.join(', ') || ''
+        colors: item.colors?.join(', ') || '',
+        dimension_width: item.dimensions?.width?.toString() || '',
+        dimension_height: item.dimensions?.height?.toString() || '',
+        dimension_depth: item.dimensions?.depth?.toString() || '',
+        dimension_unit: item.dimensions?.unit || 'inches'
       });
     } else {
       setEditing(null);
@@ -97,14 +115,20 @@ export default function Inventory() {
         low_stock_threshold: '5',
         images: [],
         sizes: '',
-        colors: ''
+        colors: '',
+        dimension_width: '',
+        dimension_height: '',
+        dimension_depth: '',
+        dimension_unit: 'inches'
       });
     }
     setDialogOpen(true);
   };
 
   const saveItem = async () => {
+    if (!businessId) return;
     const data = {
+      business_id: businessId,
       name: form.name,
       sku: form.sku,
       category: form.category,
@@ -115,7 +139,13 @@ export default function Inventory() {
       low_stock_threshold: parseInt(form.low_stock_threshold) || 5,
       images: form.images,
       sizes: form.sizes.split(',').map(s => s.trim()).filter(Boolean),
-      colors: form.colors.split(',').map(s => s.trim()).filter(Boolean)
+      colors: form.colors.split(',').map(s => s.trim()).filter(Boolean),
+      dimensions: {
+        width: parseFloat(form.dimension_width) || 0,
+        height: parseFloat(form.dimension_height) || 0,
+        depth: parseFloat(form.dimension_depth) || 0,
+        unit: form.dimension_unit || 'inches'
+      }
     };
 
     // Optimistic update
@@ -288,6 +318,7 @@ export default function Inventory() {
                     <img src={url} alt="" className="w-20 h-20 rounded-lg object-cover" />
                     <button
                       onClick={() => removeImage(i)}
+                      aria-label="Remove product image"
                       className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center"
                     >
                       <X className="w-3 h-3 text-white" />
@@ -379,6 +410,47 @@ export default function Inventory() {
                   placeholder="5"
                 />
               </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label>Item Dimensions</Label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.dimension_width}
+                  onChange={(e) => setForm({ ...form, dimension_width: e.target.value })}
+                  placeholder="Width"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.dimension_height}
+                  onChange={(e) => setForm({ ...form, dimension_height: e.target.value })}
+                  placeholder="Height"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.dimension_depth}
+                  onChange={(e) => setForm({ ...form, dimension_depth: e.target.value })}
+                  placeholder="Depth"
+                />
+                <select
+                  value={form.dimension_unit}
+                  onChange={(e) => setForm({ ...form, dimension_unit: e.target.value })}
+                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                >
+                  <option value="inches">inches</option>
+                  <option value="cm">cm</option>
+                </select>
+              </div>
+              <p className="text-xs text-slate-500">
+                Dimensions support product placement and future fit/mirror integrations.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Plus, Pencil, Trash2, Shield, User, Loader2, X, Camera } from 'lucide-react';
+import { Plus, Pencil, Trash2, Shield, User, Loader2, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { MobileSelect, MobileSelectItem } from '@/components/ui/MobileSelect';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function Employees() {
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [businessId, setBusinessId] = useState(null);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -37,7 +39,15 @@ export default function Employees() {
 
   const loadEmployees = async () => {
     try {
-      const data = await base44.entities.Employee.list();
+      const context = await getVendorContext();
+      setBusinessId(context.businessId);
+
+      if (!context.businessId) {
+        setEmployees([]);
+        return;
+      }
+
+      const data = await base44.entities.Employee.filter({ business_id: context.businessId });
       setEmployees(data);
     } catch (err) {
       console.error(err);
@@ -97,7 +107,8 @@ export default function Employees() {
   };
 
   const saveEmployee = async () => {
-    const formData = { ...form };
+    if (!businessId) return;
+    const formData = { ...form, business_id: businessId };
 
     // Optimistic update
     if (editing) {
@@ -167,6 +178,9 @@ export default function Employees() {
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Employees</h1>
             <p className="text-slate-500">Manage your team and their permissions</p>
+            <p className="text-xs text-amber-700 mt-1">
+              Employee profiles do not currently send account invitations; authentication provisioning must be handled separately.
+            </p>
           </div>
           <Button onClick={() => openDialog()} className="bg-violet-600 hover:bg-violet-700">
             <Plus className="w-4 h-4 mr-2" /> Add Employee

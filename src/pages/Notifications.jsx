@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { Bell, Plus, Send, Gift, Tag, Megaphone, Sparkles, Trash2, Loader2, Calendar, Users } from 'lucide-react';
+import { Bell, Send, Gift, Tag, Megaphone, Sparkles, Trash2, Loader2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { getVendorContext } from '@/lib/vendorContext';
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
@@ -17,6 +18,7 @@ export default function Notifications() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [businessId, setBusinessId] = useState(null);
   const [form, setForm] = useState({
     title: '',
     message: '',
@@ -33,11 +35,22 @@ export default function Notifications() {
 
   const loadData = async () => {
     try {
+      const context = await getVendorContext();
+      setBusinessId(context.businessId);
+
+      if (!context.businessId) {
+        setNotifications([]);
+        setCustomers([]);
+        return;
+      }
+
       const [notifData, customerData] = await Promise.all([
-        base44.entities.CustomerNotification.list('-created_date', 50),
-        base44.entities.StoreCustomer.list()
+        base44.entities.CustomerNotification.filter({ business_id: context.businessId }),
+        base44.entities.StoreCustomer.filter({ business_id: context.businessId })
       ]);
-      setNotifications(notifData);
+      setNotifications(
+        [...notifData].sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0)).slice(0, 50)
+      );
       setCustomers(customerData);
     } catch (err) {
       console.error(err);
@@ -75,6 +88,7 @@ export default function Notifications() {
   };
 
   const sendNotification = async () => {
+    if (!businessId) return;
     setSending(true);
     try {
       let targetCustomers = [];
@@ -98,8 +112,8 @@ export default function Notifications() {
         discount_percent: form.discount_percent ? parseFloat(form.discount_percent) : undefined,
         valid_until: form.valid_until || undefined,
         target_customers: targetCustomers,
-        sent_at: new Date().toISOString(),
-        status: 'sent'
+        business_id: businessId,
+        status: 'draft'
       });
 
       setDialogOpen(false);
@@ -150,11 +164,18 @@ export default function Notifications() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Customer Notifications</h1>
-            <p className="text-slate-500">Send promos, announcements, and birthday wishes</p>
+            <p className="text-slate-500">Prepare promos, announcements, birthday cards, and coupons</p>
           </div>
         </div>
 
-        {/* Quick Send Buttons */}
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 flex gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+          <p className="text-sm text-amber-900">
+            Customer-app delivery is not connected yet. Campaigns created here are saved as drafts and are not sent to customers.
+          </p>
+        </div>
+
+        {/* Campaign Draft Buttons */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Button
             variant="outline"
@@ -193,13 +214,13 @@ export default function Notifications() {
         {/* Recent Notifications */}
         <Card className="border-0 shadow-xl">
           <CardHeader>
-            <CardTitle>Recent Notifications</CardTitle>
+            <CardTitle>Campaign Drafts</CardTitle>
           </CardHeader>
           <CardContent>
             {notifications.length === 0 ? (
               <div className="text-center py-12">
                 <Bell className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                <p className="text-slate-500">No notifications sent yet</p>
+                <p className="text-slate-500">No campaign drafts yet</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -224,11 +245,11 @@ export default function Notifications() {
                           </p>
                         )}
                         <p className="text-xs text-slate-400 mt-2">
-                          Sent {notif.sent_at && format(new Date(notif.sent_at), 'MMM d, yyyy h:mm a')}
-                          {notif.target_customers?.length > 0 
-                            ? ` to ${notif.target_customers.length} customers`
-                            : ' to all customers'
-                          }
+                          {notif.status === 'draft' ? 'Draft' : notif.status}
+                          {notif.created_date ? ` • ${format(new Date(notif.created_date), 'MMM d, yyyy h:mm a')}` : ''}
+                          {notif.target_customers?.length > 0
+                            ? ` • ${notif.target_customers.length} selected customers`
+                            : ' • all customers'}
                         </p>
                       </div>
                       <Button size="icon" variant="ghost" onClick={() => deleteNotification(notif.id)} className="text-slate-400 hover:text-red-500">
@@ -247,7 +268,7 @@ export default function Notifications() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Send Notification</DialogTitle>
+            <DialogTitle>Create Campaign Draft</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
@@ -323,7 +344,7 @@ export default function Notifications() {
               disabled={!form.title || !form.message || sending}
             >
               {sending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-              Send Notification
+              Save Draft
             </Button>
           </div>
         </DialogContent>

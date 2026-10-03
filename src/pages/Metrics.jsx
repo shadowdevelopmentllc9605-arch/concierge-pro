@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
-import { TrendingUp, DollarSign, Users, Package, ShoppingBag, Loader2, RefreshCw, ChevronLeft, ChevronRight, BarChart3, TableIcon } from 'lucide-react';
+import { Loader2, RefreshCw, ChevronLeft, ChevronRight, TableIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { format, subDays, subMonths, subYears, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, getHours, parseISO, eachDayOfInterval, eachMonthOfInterval } from 'date-fns';
+import { getVendorContext } from '@/lib/vendorContext';
+import { format, startOfDay, endOfDay, startOfMonth, endOfMonth, startOfYear, endOfYear, getHours, eachDayOfInterval, eachMonthOfInterval } from 'date-fns';
 
 // 2-hour time blocks
 const TIME_BLOCKS = [
@@ -83,9 +83,18 @@ export default function Metrics() {
 
   const loadData = useCallback(async () => {
     try {
+      const context = await getVendorContext();
+
+      if (!context.businessId) {
+        setPurchases([]);
+        setCustomers([]);
+        setLastRefresh(new Date());
+        return;
+      }
+
       const [purchaseData, customerData] = await Promise.all([
-        base44.entities.Purchase.filter({ status: 'completed' }),
-        base44.entities.StoreCustomer.list()
+        base44.entities.Purchase.filter({ status: 'completed', business_id: context.businessId }),
+        base44.entities.StoreCustomer.filter({ business_id: context.businessId })
       ]);
       setPurchases(purchaseData);
       setCustomers(customerData);

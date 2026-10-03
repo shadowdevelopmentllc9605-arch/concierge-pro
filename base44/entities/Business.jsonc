@@ -23,6 +23,19 @@
     "email": {
       "type": "string"
     },
+    "owner_user_id": {
+      "type": "string",
+      "description": "Base44 user ID of the business owner"
+    },
+    "owner_email": {
+      "type": "string",
+      "description": "Email of the business owner"
+    },
+    "tax_rate": {
+      "type": "number",
+      "default": 0,
+      "description": "Store sales-tax rate as a percentage, e.g. 7.25"
+    },
     "setup_complete": {
       "type": "boolean",
       "default": false
