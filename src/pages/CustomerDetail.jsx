@@ -285,7 +285,12 @@ export default function CustomerDetail() {
                           </div>
                         )}
                         <div className="flex-1">
-                          <p className="font-medium">{item.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium">{item.name}</p>
+                            {customer.try_on_request_items?.includes(item.id) && (
+                              <Badge className="bg-violet-100 text-violet-700">Requested now</Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-slate-500">${item.price?.toFixed(2)}</p>
                           {item.sizes && (
                             <p className="text-xs text-slate-400">{item.sizes.join(', ')}</p>
