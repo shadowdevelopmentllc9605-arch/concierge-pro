@@ -51,22 +51,64 @@ export default async function (req: Request): Promise<Response> {
         status: "active",
       });
       const externalCheckinId = visits[0]?.external_checkin_id;
-      const token = await getToken(base44);
-      if (externalCheckinId && token) {
-        const response = await fetch(`https://base44.app/api/apps/${CUSTOMER_APP_ID}/functions/vendorBridge`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-concierge-sync-secret": token,
-          },
-          body: JSON.stringify({
-            action: "assignment",
-            externalCheckinId,
-            employeeId: employee.id,
-            employeeName: employee.name,
-          }),
+
+      if (externalCheckinId) {
+        const eventKey = `assignment:${externalCheckinId}:${employee.id}`;
+        const payloadJson = JSON.stringify({
+          action: "assignment",
+          eventKey,
+          externalCheckinId,
+          employeeId: employee.id,
+          employeeName: employee.name,
         });
-        synced = response.ok;
+
+        const jobs = await base44.asServiceRole.entities.IntegrationSyncJob.filter({
+          direction: "to_customer",
+          event_key: eventKey,
+        });
+        let job = jobs[0] || null;
+        if (!job) {
+          job = await base44.asServiceRole.entities.IntegrationSyncJob.create({
+            business_id: user.business_id,
+            direction: "to_customer",
+            action: "assignment",
+            event_key: eventKey,
+            payload_json: payloadJson,
+            status: "pending",
+            attempts: 0,
+          });
+        }
+
+        const token = await getToken(base44);
+        if (token) {
+          try {
+            const response = await fetch(`https://base44.app/api/apps/${CUSTOMER_APP_ID}/functions/vendorBridge`, {
+              method: "POST",
+              headers: {
+                "content-type": "application/json",
+                "x-concierge-sync-secret": token,
+              },
+              body: payloadJson,
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(result?.error || "Assignment sync failed.");
+            synced = true;
+            await base44.asServiceRole.entities.IntegrationSyncJob.update(job.id, {
+              status: "completed",
+              attempts: Number(job.attempts || 0) + 1,
+              last_error: "",
+              last_attempt_at: new Date().toISOString(),
+              completed_at: new Date().toISOString(),
+            });
+          } catch (error) {
+            await base44.asServiceRole.entities.IntegrationSyncJob.update(job.id, {
+              status: "pending",
+              attempts: Number(job.attempts || 0) + 1,
+              last_error: error instanceof Error ? error.message : "Assignment sync failed",
+              last_attempt_at: new Date().toISOString(),
+            });
+          }
+        }
       }
     }
 
