@@ -108,38 +108,33 @@ export default function Employees() {
 
   const saveEmployee = async () => {
     if (!businessId) return;
-    const formData = { ...form, business_id: businessId };
-
-    // Optimistic update
-    if (editing) {
-      setEmployees(prev => prev.map(e => e.id === editing.id ? { ...e, ...formData } : e));
-    } else {
-      const tempId = `temp-${Date.now()}`;
-      setEmployees(prev => [...prev, { id: tempId, ...formData }]);
-    }
-    setDialogOpen(false);
-
     try {
-      if (editing) {
-        await base44.entities.Employee.update(editing.id, formData);
-      } else {
-        await base44.entities.Employee.create(formData);
-      }
-      loadEmployees();
+      const response = await base44.functions.invoke('saveEmployee', {
+        employee: {
+          ...(editing?.id ? { id: editing.id } : {}),
+          ...form
+        },
+        appUrl: window.location.origin
+      });
+      const result = response?.data || response;
+      if (!result?.employee) throw new Error(result?.error || 'Employee could not be saved.');
+      setDialogOpen(false);
+      await loadEmployees();
     } catch (err) {
       console.error(err);
-      loadEmployees();
+      alert(err?.response?.data?.error || err?.message || 'Employee could not be saved.');
     }
   };
 
   const deleteEmployee = async (id) => {
     if (!confirm('Are you sure you want to remove this employee?')) return;
-    setEmployees(prev => prev.filter(e => e.id !== id));
     try {
-      await base44.entities.Employee.delete(id);
+      await base44.functions.invoke('removeEmployee', { employeeId: id });
+      await loadEmployees();
     } catch (err) {
       console.error(err);
-      loadEmployees();
+      alert(err?.response?.data?.error || err?.message || 'Employee could not be removed.');
+      await loadEmployees();
     }
   };
 
@@ -178,8 +173,8 @@ export default function Employees() {
           <div>
             <h1 className="text-3xl font-bold text-slate-900">Employees</h1>
             <p className="text-slate-500">Manage your team and their permissions</p>
-            <p className="text-xs text-amber-700 mt-1">
-              Employee profiles do not currently send account invitations; authentication provisioning must be handled separately.
+            <p className="text-xs text-emerald-700 mt-1">
+              New employees receive an onboarding email. Their business role and permissions are linked securely when they sign in with the same email address.
             </p>
           </div>
           <Button onClick={() => openDialog()} className="bg-violet-600 hover:bg-violet-700">
