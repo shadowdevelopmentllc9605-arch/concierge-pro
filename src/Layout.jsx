@@ -99,6 +99,7 @@ export default function Layout({ children, currentPageName }) {
     { icon: BarChart3, label: 'Metrics', page: 'Metrics', show: isManager || permissions.view_metrics },
     { icon: FileText, label: 'Procedures', page: 'Procedures', show: isManager || permissions.view_procedures },
     { icon: UserCircle, label: 'Employees', page: 'Employees', show: isManager },
+    { icon: MapPin, label: 'Locations', page: 'Locations', show: isManager },
     { icon: Settings, label: 'Settings', page: 'BusinessSetup', show: isManager }
   ].filter(item => item.show);
 
