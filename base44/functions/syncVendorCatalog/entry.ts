@@ -27,25 +27,59 @@ export default async function (req: Request): Promise<Response> {
       base44.asServiceRole.entities.InventoryItem.filter({ business_id: user.business_id }),
     ]);
 
-    const response = await fetch(`https://base44.app/api/apps/${CUSTOMER_APP_ID}/functions/vendorBridge`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-concierge-sync-secret": token,
+    const eventKey = `catalog:${user.business_id}:${crypto.randomUUID()}`;
+    const payloadJson = JSON.stringify({
+      action: "syncCatalog",
+      eventKey,
+      business: {
+        ...business,
+        style_categories: Array.from(new Set(items.map((item: any) => item.style_type).filter(Boolean))),
       },
-      body: JSON.stringify({
-        action: "syncCatalog",
-        business: {
-          ...business,
-          style_categories: Array.from(new Set(items.map((item: any) => item.style_type).filter(Boolean))),
-        },
-        locations,
-        items,
-      }),
+      locations,
+      items,
     });
 
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(result?.error || `Customer app sync failed (${response.status})`);
+    const job = await base44.asServiceRole.entities.IntegrationSyncJob.create({
+      business_id: user.business_id,
+      direction: "to_customer",
+      action: "syncCatalog",
+      event_key: eventKey,
+      payload_json: payloadJson,
+      status: "pending",
+      attempts: 0,
+    });
+
+    let result: any = {};
+    try {
+      const response = await fetch(`https://base44.app/api/apps/${CUSTOMER_APP_ID}/functions/vendorBridge`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-concierge-sync-secret": token,
+        },
+        body: payloadJson,
+      });
+
+      result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || `Customer app sync failed (${response.status})`);
+
+      await base44.asServiceRole.entities.IntegrationSyncJob.update(job.id, {
+        status: "completed",
+        attempts: 1,
+        last_error: "",
+        last_attempt_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Customer app sync failed";
+      await base44.asServiceRole.entities.IntegrationSyncJob.update(job.id, {
+        status: "pending",
+        attempts: 1,
+        last_error: message,
+        last_attempt_at: new Date().toISOString(),
+      });
+      throw error;
+    }
 
     for (const mapping of result.mappings || []) {
       const inventory = await base44.asServiceRole.entities.InventoryItem.filter({ id: mapping.inventoryId, business_id: user.business_id });
@@ -58,7 +92,12 @@ export default async function (req: Request): Promise<Response> {
       linked_customer_app_id: CUSTOMER_APP_ID,
     });
 
-    return Response.json({ success: true, vendorId: result.vendorId, syncedItems: (result.mappings || []).length });
+    return Response.json({
+      success: true,
+      vendorId: result.vendorId,
+      syncedItems: (result.mappings || []).length,
+      deactivatedItems: Number(result.deactivated || 0),
+    });
   } catch (error) {
     console.error("syncVendorCatalog", error);
     return Response.json({ error: error instanceof Error ? error.message : "Unexpected error" }, { status: 500 });
