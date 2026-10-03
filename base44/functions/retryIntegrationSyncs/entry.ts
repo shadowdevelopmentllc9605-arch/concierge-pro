@@ -48,6 +48,53 @@ export default async function (req: Request): Promise<Response> {
           last_attempt_at: new Date().toISOString(),
           completed_at: new Date().toISOString(),
         });
+
+        if (job.action === "syncCatalog") {
+          for (const mapping of result.mappings || []) {
+            const inventory = await base44.asServiceRole.entities.InventoryItem.filter({
+              id: mapping.inventoryId,
+              business_id: user.business_id,
+            });
+            if (inventory[0]) {
+              await base44.asServiceRole.entities.InventoryItem.update(inventory[0].id, {
+                linked_product_id: mapping.productId,
+              });
+            }
+          }
+          await base44.asServiceRole.entities.Business.update(user.business_id, {
+            linked_customer_app_id: CUSTOMER_APP_ID,
+          });
+        } else if (job.action === "completePurchase") {
+          const payload = JSON.parse(job.payload_json || "{}");
+          const purchases = await base44.asServiceRole.entities.Purchase.filter({
+            business_id: user.business_id,
+            external_purchase_id: payload.externalPurchaseId,
+          });
+          if (purchases[0]) {
+            await base44.asServiceRole.entities.Purchase.update(purchases[0].id, {
+              synced_to_customer: true,
+              sync_error: "",
+            });
+          }
+        } else if (job.action === "sendCampaign") {
+          const notificationId = String(job.event_key || "").startsWith("campaign:")
+            ? String(job.event_key).slice("campaign:".length)
+            : "";
+          if (notificationId) {
+            const notifications = await base44.asServiceRole.entities.CustomerNotification.filter({
+              id: notificationId,
+              business_id: user.business_id,
+            });
+            if (notifications[0]) {
+              await base44.asServiceRole.entities.CustomerNotification.update(notifications[0].id, {
+                status: "sent",
+                sent_at: new Date().toISOString(),
+                delivery_error: "",
+              });
+            }
+          }
+        }
+
         completed += 1;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Sync failed";
