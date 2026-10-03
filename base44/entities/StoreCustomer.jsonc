@@ -98,6 +98,12 @@
         "type": "string"
       },
       "description": "Inventory item IDs specifically requested for try-on"
+    },
+    "processed_purchase_events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [
