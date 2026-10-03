@@ -76,6 +76,29 @@ export default async function (req: Request): Promise<Response> {
     }
 
     const token = await getToken(base44);
+    const eventKey = `campaign:${notification.id}`;
+    const payloadJson = JSON.stringify({
+      action: "sendCampaign",
+      eventKey,
+      userIds: linkedUserIds,
+      title: campaign.title,
+      message: campaign.message,
+      type: campaign.type || "general",
+      couponCode: campaign.coupon_code || "",
+      validUntil: campaign.valid_until || "",
+      vendorBusinessId: user.business_id,
+    });
+
+    const job = await base44.asServiceRole.entities.IntegrationSyncJob.create({
+      business_id: user.business_id,
+      direction: "to_customer",
+      action: "sendCampaign",
+      event_key: eventKey,
+      payload_json: payloadJson,
+      status: "pending",
+      attempts: 0,
+    });
+
     if (!token) {
       await base44.asServiceRole.entities.CustomerNotification.update(notification.id, {
         delivery_error: "Customer app integration is not configured.",
@@ -83,36 +106,45 @@ export default async function (req: Request): Promise<Response> {
       return Response.json({
         success: false,
         saved: true,
+        queued: true,
         error: "Customer app integration is not configured.",
         notificationId: notification.id,
       }, { status: 409 });
     }
 
-    const response = await fetch(`https://base44.app/api/apps/${CUSTOMER_APP_ID}/functions/vendorBridge`, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-concierge-sync-secret": token,
-      },
-      body: JSON.stringify({
-        action: "sendCampaign",
-        userIds: linkedUserIds,
-        title: campaign.title,
-        message: campaign.message,
-        type: campaign.type || "general",
-        couponCode: campaign.coupon_code || "",
-        validUntil: campaign.valid_until || "",
-        vendorBusinessId: user.business_id,
-      }),
-    });
+    let result: any = {};
+    try {
+      const response = await fetch(`https://base44.app/api/apps/${CUSTOMER_APP_ID}/functions/vendorBridge`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-concierge-sync-secret": token,
+        },
+        body: payloadJson,
+      });
 
-    const result = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const errorMessage = result?.error || `Customer delivery failed (${response.status})`;
+      result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || `Customer delivery failed (${response.status})`);
+
+      await base44.asServiceRole.entities.IntegrationSyncJob.update(job.id, {
+        status: "completed",
+        attempts: 1,
+        last_error: "",
+        last_attempt_at: new Date().toISOString(),
+        completed_at: new Date().toISOString(),
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Customer delivery failed";
+      await base44.asServiceRole.entities.IntegrationSyncJob.update(job.id, {
+        status: "pending",
+        attempts: 1,
+        last_error: errorMessage,
+        last_attempt_at: new Date().toISOString(),
+      });
       await base44.asServiceRole.entities.CustomerNotification.update(notification.id, {
         delivery_error: errorMessage,
       });
-      return Response.json({ success: false, saved: true, error: errorMessage }, { status: 502 });
+      return Response.json({ success: false, saved: true, queued: true, error: errorMessage }, { status: 502 });
     }
 
     await base44.asServiceRole.entities.CustomerNotification.update(notification.id, {
