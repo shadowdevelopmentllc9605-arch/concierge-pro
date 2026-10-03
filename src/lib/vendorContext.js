@@ -96,6 +96,7 @@ export function canAccessVendorPage(pageName, contextOrEmployee) {
   if (pageName === 'Checkout') return Boolean(permissions.process_checkout);
   if (pageName === 'Notifications') return Boolean(permissions.send_notifications);
   if (pageName === 'Metrics') return Boolean(permissions.view_metrics);
+  if (pageName === 'Payroll') return Boolean(permissions.view_payroll);
   if (pageName === 'Procedures') return Boolean(permissions.view_procedures);
 
   return false;
