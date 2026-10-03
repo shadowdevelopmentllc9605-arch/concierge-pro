@@ -114,6 +114,7 @@ export default function Layout({ children, currentPageName }) {
     { icon: DoorOpen, label: 'Fitting Rooms', page: 'FittingRooms', show: true },
     { icon: Bell, label: 'Notifications', page: 'Notifications', show: isManager || permissions.send_notifications },
     { icon: BarChart3, label: 'Metrics', page: 'Metrics', show: isManager || permissions.view_metrics },
+    { icon: FileText, label: 'Payroll', page: 'Payroll', show: isManager || permissions.view_payroll },
     { icon: FileText, label: 'Procedures', page: 'Procedures', show: isManager || permissions.view_procedures },
     { icon: UserCircle, label: 'My Profile', page: 'EmployeeProfile', show: true },
     { icon: UserCircle, label: 'Employees', page: 'Employees', show: isManager },
