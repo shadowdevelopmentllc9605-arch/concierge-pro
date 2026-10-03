@@ -8,7 +8,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MANAGER_PERMISSIONS } from '@/lib/vendorContext';
 
 export default function BusinessSetup() {
   const navigate = useNavigate();
@@ -104,24 +103,9 @@ export default function BusinessSetup() {
         setBusiness(savedBusiness);
       }
 
-      const employees = await base44.entities.Employee.filter({ email: userData.email });
-      const existingManager = employees[0];
-
-      const managerData = {
-        user_id: userData.id,
-        name: userData.full_name || userData.name || userData.email,
-        email: userData.email,
-        role: 'manager',
-        permissions: MANAGER_PERMISSIONS,
-        status: 'active',
-        business_id: savedBusiness.id,
-      };
-
-      if (existingManager) {
-        await base44.entities.Employee.update(existingManager.id, managerData);
-      } else {
-        await base44.entities.Employee.create(managerData);
-      }
+      // The backend claim function creates/updates the manager Employee record
+      // and protected User membership fields. Browser code cannot grant itself roles.
+      await base44.functions.invoke('claimVendorMembership', {});
     } catch (err) {
       console.error(err);
     } finally {
