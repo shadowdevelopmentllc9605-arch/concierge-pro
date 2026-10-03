@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
+import { sharedBackendBridge } from '@/lib/sharedBackendBridge';
 import { 
   LayoutDashboard, Users, Package, MapPin, ShoppingCart, 
   Bell, BarChart3, DoorOpen, FileText, Settings, Menu,
@@ -49,7 +50,7 @@ export default function Layout({ children, currentPageName }) {
       setBusinessId(context.businessId);
 
       if (context.businessId) {
-        base44.functions.invoke('retryIntegrationSyncs', {}).catch(() => {});
+        sharedBackendBridge.retryPending().catch(() => {});
       }
     } catch (err) {
       console.error(err);
