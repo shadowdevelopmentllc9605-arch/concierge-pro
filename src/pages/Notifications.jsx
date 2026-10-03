@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
+import { sharedBackendBridge } from '@/lib/sharedBackendBridge';
 import { Bell, Send, Gift, Tag, Megaphone, Sparkles, Trash2, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,18 +94,15 @@ export default function Notifications() {
     setSending(true);
     setDeliveryMessage(null);
     try {
-      const response = await base44.functions.invoke('sendCampaign', {
-        campaign: {
-          title: form.title,
-          message: form.message,
-          type: form.type,
-          coupon_code: form.coupon_code || '',
-          discount_percent: form.discount_percent ? parseFloat(form.discount_percent) : undefined,
-          valid_until: form.valid_until || '',
-          target: form.target
-        }
+      const result = await sharedBackendBridge.sendCampaign({
+        title: form.title,
+        message: form.message,
+        type: form.type,
+        coupon_code: form.coupon_code || '',
+        discount_percent: form.discount_percent ? parseFloat(form.discount_percent) : undefined,
+        valid_until: form.valid_until || '',
+        target: form.target
       });
-      const result = response?.data || response;
 
       if (!result?.success) {
         throw new Error(result?.error || 'The campaign could not be delivered.');
