@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
+import { sharedBackendBridge } from '@/lib/sharedBackendBridge';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 import { Plus, Pencil, Trash2, Package, Search, AlertTriangle, Loader2, X, Image, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -103,8 +104,7 @@ export default function Inventory() {
     setSyncing(true);
     setSyncMessage('');
     try {
-      const response = await base44.functions.invoke('syncVendorCatalog', {});
-      const result = response?.data || response;
+      const result = await sharedBackendBridge.syncCatalog();
       if (!result?.success) throw new Error(result?.error || 'Catalog sync failed.');
       setSyncMessage(`Synced ${result.syncedItems || 0} item(s) to The Concierge.`);
       await loadItems();
