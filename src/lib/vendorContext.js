@@ -88,6 +88,7 @@ export function canAccessVendorPage(pageName, contextOrEmployee) {
     'EmployeeProfile',
     'FAQ',
     'Support',
+    'MirrorDisplay',
   ]);
 
   if (alwaysAllowed.has(pageName)) return true;
