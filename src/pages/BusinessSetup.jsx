@@ -252,19 +252,14 @@ export default function BusinessSetup() {
                     placeholder="7.25"
                   />
                   <p className="text-xs text-slate-500">
-                    Used for the current single-location POS. Multi-location tax rules require per-location configuration.
+                    Default/fallback tax rate. Configure each store's tax rate on the Locations page.
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Link to Customer App (Optional)</Label>
-                  <Input
-                    value={form.linked_customer_app_id}
-                    onChange={(e) => setForm({ ...form, linked_customer_app_id: e.target.value })}
-                    placeholder="Customer Concierge App ID"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Stores the customer-app identifier only. Cross-app synchronization still requires the shared backend/API integration.
+                <div className="rounded-lg border border-violet-100 bg-violet-50 p-3">
+                  <p className="text-sm font-medium text-violet-900">The Concierge customer app</p>
+                  <p className="text-xs text-violet-700 mt-1">
+                    Customer-app synchronization is handled by the secure integration bridge. Use Sync Customer App from Inventory or Locations after your store data is ready.
                   </p>
                 </div>
               </>
@@ -392,7 +387,7 @@ export default function BusinessSetup() {
                 )}
                 {deleteConfirm && (
                   <p className="text-xs text-red-500 text-center mt-2">
-                    This deletes the vendor records Concierge Pro can address and logs you out. Your Base44 sign-in account and previously uploaded files may require separate platform-level deletion.
+                    This permanently deletes this business, its Concierge Pro records, your Base44 owner sign-in account, and linked catalog data in The Concierge. Employee logins are retained but their access to this business is revoked. Base44 does not currently expose an SDK method to purge previously uploaded files from storage.
                   </p>
                 )}
               </div>
