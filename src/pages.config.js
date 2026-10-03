@@ -59,6 +59,7 @@ import Notifications from './pages/Notifications';
 import Metrics from './pages/Metrics';
 import Procedures from './pages/Procedures';
 import FittingRooms from './pages/FittingRooms';
+import Locations from './pages/Locations';
 import __Layout from './Layout.jsx';
 
 
@@ -75,6 +76,7 @@ export const PAGES = {
     "Metrics": Metrics,
     "Procedures": Procedures,
     "FittingRooms": FittingRooms,
+    "Locations": Locations,
 }
 
 export const pagesConfig = {
