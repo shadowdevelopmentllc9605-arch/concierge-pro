@@ -1,0 +1,51 @@
+{
+  "name": "StoreAlert",
+  "type": "object",
+  "properties": {
+    "business_id": {
+      "type": "string"
+    },
+    "location_id": {
+      "type": "string"
+    },
+    "customer_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "customer_entry",
+        "try_on_request",
+        "general"
+      ],
+      "default": "general"
+    },
+    "read_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "business_id",
+    "title",
+    "message"
+  ],
+  "rls": {
+    "create": false,
+    "read": {
+      "data.business_id": "{{user.data.business_id}}"
+    },
+    "update": {
+      "data.business_id": "{{user.data.business_id}}"
+    },
+    "delete": false
+  }
+}
