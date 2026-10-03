@@ -81,6 +81,30 @@ export default async function (req: Request): Promise<Response> {
       return Response.json({ success: true, customerId: storeCustomer.id });
     }
 
+    if (action === "tryOnRequest") {
+      const { businessId, customerId, productIds = [] } = body;
+      const customers = await base44.asServiceRole.entities.StoreCustomer.filter({
+        linked_customer_id: customerId,
+        business_id: businessId,
+      });
+      const customer = customers[0];
+      if (!customer) return Response.json({ error: "Customer not found" }, { status: 404 });
+
+      const inventoryIds = [];
+      for (const productId of productIds) {
+        const items = await base44.asServiceRole.entities.InventoryItem.filter({
+          linked_product_id: productId,
+          business_id: businessId,
+        });
+        if (items[0]) inventoryIds.push(items[0].id);
+      }
+
+      await base44.asServiceRole.entities.StoreCustomer.update(customer.id, {
+        try_on_request_items: inventoryIds,
+      });
+      return Response.json({ success: true, requestedItems: inventoryIds.length });
+    }
+
     if (action === "checkout") {
       const { businessId, externalCheckinId, customerId } = body;
       const customers = await base44.asServiceRole.entities.StoreCustomer.filter({
