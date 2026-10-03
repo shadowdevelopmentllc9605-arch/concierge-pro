@@ -91,6 +91,13 @@
     },
     "location_id": {
       "type": "string"
+    },
+    "try_on_request_items": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Inventory item IDs specifically requested for try-on"
     }
   },
   "required": [
