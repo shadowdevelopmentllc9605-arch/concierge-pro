@@ -31,6 +31,9 @@
       "items": {
         "type": "string"
       }
+    },
+    "external_event_key": {
+      "type": "string"
     }
   },
   "required": [
