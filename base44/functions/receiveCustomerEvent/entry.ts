@@ -16,6 +16,7 @@ export default async function (req: Request): Promise<Response> {
 
     const body = await req.json();
     const action = body?.action;
+    const eventKey = body?.eventKey || "";
 
     if (action === "checkin") {
       const { businessId, locationId, externalCheckinId, customer } = body;
@@ -38,6 +39,10 @@ export default async function (req: Request): Promise<Response> {
         linked_customer_id: customer.user_id,
         business_id: businessId,
       });
+      const visits = externalCheckinId
+        ? await base44.asServiceRole.entities.StoreVisit.filter({ external_checkin_id: externalCheckinId, business_id: businessId })
+        : [];
+      const isNewVisit = !visits[0];
 
       const now = new Date().toISOString();
       const data = {
@@ -47,27 +52,24 @@ export default async function (req: Request): Promise<Response> {
         linked_customer_id: customer.user_id,
         in_store: true,
         location_id: locationId || "",
-        entered_at: now,
+        entered_at: existing[0]?.entered_at || now,
         wishlist_items: wishlistItems,
         birthday: customer.birthday || undefined,
         preferences: customer.preferences || {},
-        last_visit: now,
+        last_visit: isNewVisit ? now : (existing[0]?.last_visit || now),
         business_id: businessId,
       };
 
       let storeCustomer;
       if (existing[0]) {
-        const visitCount = Number(existing[0].visit_count || 0) + 1;
+        const visitCount = Number(existing[0].visit_count || 0) + (isNewVisit ? 1 : 0);
         await base44.asServiceRole.entities.StoreCustomer.update(existing[0].id, { ...data, visit_count: visitCount });
         storeCustomer = { ...existing[0], ...data, visit_count: visitCount };
       } else {
-        storeCustomer = await base44.asServiceRole.entities.StoreCustomer.create({ ...data, visit_count: 1 });
+        storeCustomer = await base44.asServiceRole.entities.StoreCustomer.create({ ...data, visit_count: isNewVisit ? 1 : 0 });
       }
 
-      const visits = externalCheckinId
-        ? await base44.asServiceRole.entities.StoreVisit.filter({ external_checkin_id: externalCheckinId, business_id: businessId })
-        : [];
-      if (!visits[0]) {
+      if (isNewVisit) {
         await base44.asServiceRole.entities.StoreVisit.create({
           business_id: businessId,
           location_id: locationId || "",
@@ -76,15 +78,23 @@ export default async function (req: Request): Promise<Response> {
           entered_at: now,
           status: "active",
         });
-        await base44.asServiceRole.entities.StoreAlert.create({
+        const alertKey = eventKey || `checkin:${externalCheckinId || storeCustomer.id}`;
+        const alerts = await base44.asServiceRole.entities.StoreAlert.filter({
           business_id: businessId,
-          location_id: locationId || "",
-          customer_id: storeCustomer.id,
-          title: "Customer entered the store",
-          message: `${customer.name} checked in and is ready for assistance.`,
-          type: "customer_entry",
-          read_by: [],
+          external_event_key: alertKey,
         });
+        if (!alerts[0]) {
+          await base44.asServiceRole.entities.StoreAlert.create({
+            business_id: businessId,
+            location_id: locationId || "",
+            customer_id: storeCustomer.id,
+            title: "Customer entered the store",
+            message: `${customer.name} checked in and is ready for assistance.`,
+            type: "customer_entry",
+            read_by: [],
+            external_event_key: alertKey,
+          });
+        }
       }
 
       return Response.json({ success: true, customerId: storeCustomer.id });
@@ -111,30 +121,30 @@ export default async function (req: Request): Promise<Response> {
       await base44.asServiceRole.entities.StoreCustomer.update(customer.id, {
         try_on_request_items: inventoryIds,
       });
-      await base44.asServiceRole.entities.StoreAlert.create({
+      const alertKey = eventKey || `tryOn:${businessId}:${customer.id}:${productIds.slice().sort().join(",")}`;
+      const alerts = await base44.asServiceRole.entities.StoreAlert.filter({
         business_id: businessId,
-        location_id: customer.location_id || "",
-        customer_id: customer.id,
-        title: "Try-on request",
-        message: `${customer.name} requested ${inventoryIds.length} item${inventoryIds.length === 1 ? "" : "s"} for try-on.`,
-        type: "try_on_request",
-        read_by: [],
+        external_event_key: alertKey,
       });
+      if (!alerts[0]) {
+        await base44.asServiceRole.entities.StoreAlert.create({
+          business_id: businessId,
+          location_id: customer.location_id || "",
+          customer_id: customer.id,
+          title: "Try-on request",
+          message: `${customer.name} requested ${inventoryIds.length} item${inventoryIds.length === 1 ? "" : "s"} for try-on.`,
+          type: "try_on_request",
+          read_by: [],
+          external_event_key: alertKey,
+        });
+      }
       return Response.json({ success: true, requestedItems: inventoryIds.length });
     }
 
     if (action === "onlinePurchase") {
-      const { businessId, externalOrderId, customer, items = [] } = body;
+      const { businessId, externalOrderId, customer, items = [], orderTotals = {} } = body;
       if (!businessId || !externalOrderId || !customer?.user_id || !items.length) {
         return Response.json({ error: "Missing online purchase data" }, { status: 400 });
-      }
-
-      const duplicate = await base44.asServiceRole.entities.Purchase.filter({
-        business_id: businessId,
-        external_purchase_id: externalOrderId,
-      });
-      if (duplicate[0]) {
-        return Response.json({ success: true, duplicate: true, purchaseId: duplicate[0].id });
       }
 
       const customerMatches = await base44.asServiceRole.entities.StoreCustomer.filter({
@@ -152,11 +162,38 @@ export default async function (req: Request): Promise<Response> {
           business_id: businessId,
           total_spent: 0,
           visit_count: 0,
+          processed_purchase_events: [],
         });
       }
 
-      const purchaseItems = [];
-      let subtotal = 0;
+      const existingPurchases = await base44.asServiceRole.entities.Purchase.filter({
+        business_id: businessId,
+        external_purchase_id: externalOrderId,
+      });
+      let purchase = existingPurchases[0] || null;
+
+      if (!purchase) {
+        purchase = await base44.asServiceRole.entities.Purchase.create({
+          customer_id: storeCustomer.id,
+          employee_id: "",
+          items: [],
+          subtotal: Number(orderTotals.subtotal || 0),
+          tax: Number(orderTotals.tax || 0),
+          shipping: Number(orderTotals.shipping || 0),
+          discount: Number(orderTotals.discount || 0),
+          total: Number(orderTotals.total || 0),
+          payment_method: "credit_card",
+          payment_provider: "stripe",
+          status: "processing",
+          business_id: businessId,
+          external_purchase_id: externalOrderId,
+          synced_to_customer: true,
+        });
+      } else if (purchase.status === "completed") {
+        return Response.json({ success: true, duplicate: true, purchaseId: purchase.id });
+      }
+
+      const purchaseItems: any[] = [];
       const warnings: string[] = [];
 
       for (const incoming of items) {
@@ -172,35 +209,44 @@ export default async function (req: Request): Promise<Response> {
 
         const quantity = Math.max(1, Math.floor(Number(incoming.quantity || 1)));
         const price = Number(incoming.price ?? inventory.price ?? 0);
-        subtotal += price * quantity;
+        const stockEventKey = `online:${externalOrderId}:${incoming.line_key || [incoming.product_id, incoming.size, incoming.color].join(":")}`;
+        const processed = Array.isArray(inventory.processed_stock_events)
+          ? inventory.processed_stock_events
+          : [];
 
-        const update: any = {};
-        if (Array.isArray(inventory.variants) && inventory.variants.length > 0) {
-          let matched = false;
-          update.variants = inventory.variants.map((variant: any) => {
-            if (
-              String(variant.size || "") === String(incoming.size || "") &&
-              String(variant.color || "") === String(incoming.color || "")
-            ) {
-              matched = true;
-              const before = Math.max(0, Number(variant.stock_quantity || 0));
-              if (quantity > before) warnings.push(`Oversold ${inventory.name} ${incoming.size || ""} ${incoming.color || ""}`.trim());
-              return { ...variant, stock_quantity: Math.max(0, before - quantity) };
-            }
-            return variant;
-          });
-          if (!matched) warnings.push(`Variant mapping missing for ${inventory.name}`);
-          update.stock_quantity = update.variants.reduce(
-            (sum: number, variant: any) => sum + Math.max(0, Number(variant.stock_quantity || 0)),
-            0,
-          );
-        } else {
-          const before = Math.max(0, Number(inventory.stock_quantity || 0));
-          if (quantity > before) warnings.push(`Oversold ${inventory.name}`);
-          update.stock_quantity = Math.max(0, before - quantity);
+        if (!processed.includes(stockEventKey)) {
+          const update: any = {
+            processed_stock_events: [...processed, stockEventKey].slice(-250),
+          };
+
+          if (Array.isArray(inventory.variants) && inventory.variants.length > 0) {
+            let matched = false;
+            update.variants = inventory.variants.map((variant: any) => {
+              if (
+                String(variant.size || "") === String(incoming.size || "") &&
+                String(variant.color || "") === String(incoming.color || "")
+              ) {
+                matched = true;
+                const before = Math.max(0, Number(variant.stock_quantity || 0));
+                if (quantity > before) warnings.push(`Oversold ${inventory.name} ${incoming.size || ""} ${incoming.color || ""}`.trim());
+                return { ...variant, stock_quantity: Math.max(0, before - quantity) };
+              }
+              return variant;
+            });
+            if (!matched) warnings.push(`Variant mapping missing for ${inventory.name}`);
+            update.stock_quantity = update.variants.reduce(
+              (sum: number, variant: any) => sum + Math.max(0, Number(variant.stock_quantity || 0)),
+              0,
+            );
+          } else {
+            const before = Math.max(0, Number(inventory.stock_quantity || 0));
+            if (quantity > before) warnings.push(`Oversold ${inventory.name}`);
+            update.stock_quantity = Math.max(0, before - quantity);
+          }
+
+          await base44.asServiceRole.entities.InventoryItem.update(inventory.id, update);
         }
 
-        await base44.asServiceRole.entities.InventoryItem.update(inventory.id, update);
         purchaseItems.push({
           inventory_item_id: inventory.id,
           name: inventory.name,
@@ -212,29 +258,35 @@ export default async function (req: Request): Promise<Response> {
       }
 
       if (!purchaseItems.length) {
+        await base44.asServiceRole.entities.Purchase.update(purchase.id, {
+          status: "cancelled",
+          sync_error: "No linked vendor inventory items were found",
+        });
         return Response.json({ error: "No linked vendor inventory items were found" }, { status: 409 });
       }
 
-      const purchase = await base44.asServiceRole.entities.Purchase.create({
-        customer_id: storeCustomer.id,
-        employee_id: "",
+      await base44.asServiceRole.entities.Purchase.update(purchase.id, {
         items: purchaseItems,
-        subtotal,
-        tax: 0,
-        discount: 0,
-        total: subtotal,
-        payment_method: "credit_card",
-        payment_provider: "stripe",
+        subtotal: Number(orderTotals.subtotal || 0),
+        tax: Number(orderTotals.tax || 0),
+        shipping: Number(orderTotals.shipping || 0),
+        discount: Number(orderTotals.discount || 0),
+        total: Number(orderTotals.total || 0),
         status: "completed",
-        business_id: businessId,
-        external_purchase_id: externalOrderId,
-        synced_to_customer: true,
+        sync_error: warnings.join(" | "),
       });
 
-      await base44.asServiceRole.entities.StoreCustomer.update(storeCustomer.id, {
-        total_spent: Number(storeCustomer.total_spent || 0) + subtotal,
-        last_visit: new Date().toISOString(),
-      });
+      const spendEvent = `online:${externalOrderId}`;
+      const processedSpends = Array.isArray(storeCustomer.processed_purchase_events)
+        ? storeCustomer.processed_purchase_events
+        : [];
+      if (!processedSpends.includes(spendEvent)) {
+        await base44.asServiceRole.entities.StoreCustomer.update(storeCustomer.id, {
+          total_spent: Number(storeCustomer.total_spent || 0) + Number(orderTotals.total || 0),
+          last_visit: new Date().toISOString(),
+          processed_purchase_events: [...processedSpends, spendEvent].slice(-250),
+        });
+      }
 
       return Response.json({
         success: true,
