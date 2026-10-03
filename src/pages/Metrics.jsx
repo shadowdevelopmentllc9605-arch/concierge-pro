@@ -73,7 +73,7 @@ function filterByRange(purchases, customers, start, end) {
 
 export default function Metrics() {
   const [purchases, setPurchases] = useState([]);
-  const [customers, setCustomers] = useState([]);
+  const [customers, setCustomers] = useState([]); // StoreVisit events; name retained to minimize rendering churn
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState(new Date());
   const [viewMode, setViewMode] = useState('day'); // day | month | year
@@ -94,7 +94,7 @@ export default function Metrics() {
 
       const [purchaseData, customerData] = await Promise.all([
         base44.entities.Purchase.filter({ status: 'completed', business_id: context.businessId }),
-        base44.entities.StoreCustomer.filter({ business_id: context.businessId })
+        base44.entities.StoreVisit.filter({ business_id: context.businessId })
       ]);
       setPurchases(purchaseData);
       setCustomers(customerData);
