@@ -28,6 +28,9 @@ export default function Checkout() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [lastSaleTotal, setLastSaleTotal] = useState(0);
   const [locationTaxRate, setLocationTaxRate] = useState(null);
+  const [saleRequestId, setSaleRequestId] = useState(() => crypto.randomUUID());
+
+  const resetSaleRequest = () => setSaleRequestId(crypto.randomUUID());
 
   const urlParams = new URLSearchParams(window.location.search);
   const preselectedCustomerId = urlParams.get('customer');
@@ -86,12 +89,14 @@ export default function Checkout() {
     const existing = cart.find(cartItem => cartItem.id === item.id);
     if (existing) {
       if (existing.quantity >= (item.stock_quantity || 0)) return;
+      resetSaleRequest();
       setCart(cart.map(cartItem =>
         cartItem.id === item.id
           ? { ...cartItem, quantity: cartItem.quantity + 1 }
           : cartItem
       ));
     } else {
+      resetSaleRequest();
       setCart([...cart, {
         ...item,
         quantity: 1,
@@ -102,6 +107,7 @@ export default function Checkout() {
   };
 
   const updateQuantity = (itemId, delta) => {
+    resetSaleRequest();
     setCart(cart
       .map(cartItem => {
         if (cartItem.id !== itemId) return cartItem;
@@ -116,6 +122,7 @@ export default function Checkout() {
   };
 
   const removeFromCart = (itemId) => {
+    resetSaleRequest();
     setCart(cart.filter(c => c.id !== itemId));
   };
 
@@ -156,6 +163,7 @@ export default function Checkout() {
         locationId,
         paymentMethod,
         discountPercent: discount,
+        idempotencyKey: saleRequestId,
         items: cart.map(item => ({
           inventoryItemId: item.id,
           quantity: item.quantity,
@@ -172,6 +180,7 @@ export default function Checkout() {
       setLastSaleTotal(Number(result.total || 0));
       setShowSuccess(true);
       setCart([]);
+      setSaleRequestId(crypto.randomUUID());
       await loadData();
     } catch (err) {
       console.error(err);
@@ -252,7 +261,10 @@ export default function Checkout() {
             
             <Select 
               value={selectedCustomer?.id || ''} 
-              onValueChange={(v) => setSelectedCustomer(customers.find(c => c.id === v))}
+              onValueChange={(v) => {
+                resetSaleRequest();
+                setSelectedCustomer(customers.find(c => c.id === v));
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select customer" />
