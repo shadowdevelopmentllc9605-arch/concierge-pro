@@ -20,8 +20,9 @@ const inferCategoryGroup = (category = '') => {
   if (/suit|tuxedo|formal jacket/.test(value)) return 'suits';
   if (/pant|jean|short|khaki|trouser|bottom/.test(value)) return 'bottoms';
   if (/dress|skirt|jumper/.test(value)) return 'dresses';
+  if (/hat|cap|beanie|headwear/.test(value)) return 'headwear';
   if (/shoe|boot|sneaker|footwear/.test(value)) return 'footwear';
-  if (/jacket|coat|outerwear/.test(value)) return 'outerwear';
+  if (/coat|parka|outerwear/.test(value)) return 'outerwear';
   if (/shirt|top|tee|t-shirt|polo|vest|blouse|sweater|hoodie/.test(value)) return 'tops';
   return '';
 };
@@ -494,6 +495,10 @@ export default function Inventory() {
                 >
                   <option value="business">Business</option>
                   <option value="casual">Casual</option>
+                  <option value="formal">Formal</option>
+                  <option value="evening">Evening</option>
+                  <option value="outdoor">Outdoor</option>
+                  <option value="active">Active</option>
                   <option value="nightlife">Nightlife</option>
                   <option value="trendy">Trendy</option>
                 </select>
