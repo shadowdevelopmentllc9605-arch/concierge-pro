@@ -120,6 +120,66 @@
           },
           "inseam_max_cm": {
             "type": "number"
+          },
+          "numeric_equivalent": {
+            "type": "string"
+          },
+          "neck_min_cm": {
+            "type": "number"
+          },
+          "neck_max_cm": {
+            "type": "number"
+          },
+          "sleeve_min_cm": {
+            "type": "number"
+          },
+          "sleeve_max_cm": {
+            "type": "number"
+          },
+          "foot_length_min_cm": {
+            "type": "number"
+          },
+          "foot_length_max_cm": {
+            "type": "number"
+          },
+          "height_min_cm": {
+            "type": "number"
+          },
+          "height_max_cm": {
+            "type": "number"
+          },
+          "bust_min_cm": {
+            "type": "number"
+          },
+          "bust_max_cm": {
+            "type": "number"
+          },
+          "underbust_min_cm": {
+            "type": "number"
+          },
+          "underbust_max_cm": {
+            "type": "number"
+          },
+          "us_size": {
+            "type": "string"
+          },
+          "uk_size": {
+            "type": "string"
+          },
+          "eu_size": {
+            "type": "string"
+          },
+          "jp_size": {
+            "type": "string"
+          },
+          "alternate_size": {
+            "type": "string"
+          },
+          "band_size": {
+            "type": "string"
+          },
+          "cup_size": {
+            "type": "string"
           }
         }
       }
@@ -175,18 +235,9 @@
           "data.business_id": "{{user.data.business_id}}"
         },
         {
-          "$or": [
-            {
-              "user_condition": {
-                "data.vendor_role": "manager"
-              }
-            },
-            {
-              "user_condition": {
-                "data.vendor_permissions.manage_inventory": true
-              }
-            }
-          ]
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
         }
       ]
     },
@@ -199,23 +250,9 @@
           "data.business_id": "{{user.data.business_id}}"
         },
         {
-          "$or": [
-            {
-              "user_condition": {
-                "data.vendor_role": "manager"
-              }
-            },
-            {
-              "user_condition": {
-                "data.vendor_permissions.manage_inventory": true
-              }
-            },
-            {
-              "user_condition": {
-                "data.vendor_permissions.edit_floor_plan": true
-              }
-            }
-          ]
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
         }
       ]
     },
@@ -225,18 +262,9 @@
           "data.business_id": "{{user.data.business_id}}"
         },
         {
-          "$or": [
-            {
-              "user_condition": {
-                "data.vendor_role": "manager"
-              }
-            },
-            {
-              "user_condition": {
-                "data.vendor_permissions.manage_inventory": true
-              }
-            }
-          ]
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
         }
       ]
     }
