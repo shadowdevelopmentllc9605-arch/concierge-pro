@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
-import { sharedBackendBridge } from '@/lib/sharedBackendBridge';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 import { Plus, Pencil, Trash2, Package, Search, AlertTriangle, Loader2, X, Image, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,6 +12,18 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { getVendorContext } from '@/lib/vendorContext';
 
+const normalizeBrandKey = (value = '') => String(value).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+const inferCategoryGroup = (category = '') => {
+  const value = String(category).toLowerCase();
+  if (/pant|jean|short|khaki|trouser|bottom/.test(value)) return 'bottoms';
+  if (/dress|skirt|jumper/.test(value)) return 'dresses';
+  if (/shoe|boot|sneaker|footwear/.test(value)) return 'footwear';
+  if (/jacket|coat|outerwear/.test(value)) return 'outerwear';
+  if (/shirt|top|tee|t-shirt|polo|suit|vest|blouse|sweater|hoodie/.test(value)) return 'tops';
+  return '';
+};
+
 export default function Inventory() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +32,8 @@ export default function Inventory() {
   const [editing, setEditing] = useState(null);
   const [businessId, setBusinessId] = useState(null);
   const [locations, setLocations] = useState([]);
+  const [brandCharts, setBrandCharts] = useState([]);
+  const [selectedBrandChartId, setSelectedBrandChartId] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [form, setForm] = useState({
@@ -61,12 +74,14 @@ export default function Inventory() {
         return;
       }
 
-      const [data, locationData] = await Promise.all([
+      const [data, locationData, sizingData] = await Promise.all([
         base44.entities.InventoryItem.filter({ business_id: context.businessId }),
-        base44.entities.BusinessLocation.filter({ business_id: context.businessId, active: true })
+        base44.entities.BusinessLocation.filter({ business_id: context.businessId, active: true }),
+        base44.entities.BrandSizeChart.filter({ active: true })
       ]);
       setItems(data);
       setLocations(locationData);
+      setBrandCharts(sizingData);
     } catch (err) {
       console.error(err);
     } finally {
@@ -104,7 +119,8 @@ export default function Inventory() {
     setSyncing(true);
     setSyncMessage('');
     try {
-      const result = await sharedBackendBridge.syncCatalog();
+      const response = await base44.functions.invoke('syncVendorCatalog', {});
+      const result = response?.data || response;
       if (!result?.success) throw new Error(result?.error || 'Catalog sync failed.');
       setSyncMessage(`Synced ${result.syncedItems || 0} item(s) to The Concierge.`);
       await loadItems();
@@ -123,6 +139,7 @@ export default function Inventory() {
   };
 
   const openDialog = (item = null) => {
+    setSelectedBrandChartId('');
     if (item) {
       setEditing(item);
       setForm({
@@ -264,6 +281,25 @@ export default function Inventory() {
 
   const lowStockCount = items.filter(i => i.stock_quantity <= (i.low_stock_threshold || 5)).length;
 
+  const inferredCategoryGroup = inferCategoryGroup(form.category);
+  const availableBrandCharts = brandCharts.filter(chart => {
+    if (normalizeBrandKey(chart.brand_key || chart.brand_name) !== normalizeBrandKey(form.brand)) return false;
+    if (!inferredCategoryGroup) return true;
+    if (chart.category_group === inferredCategoryGroup) return true;
+    return inferredCategoryGroup === 'outerwear' && chart.category_group === 'tops';
+  });
+  const selectedBrandChart = brandCharts.find(chart => chart.id === selectedBrandChartId) || null;
+
+  const applyVerifiedChart = (chartId) => {
+    setSelectedBrandChartId(chartId);
+    const chart = brandCharts.find(item => item.id === chartId);
+    if (!chart) return;
+    setForm(prev => ({
+      ...prev,
+      size_chart_json: JSON.stringify(chart.entries || [], null, 2)
+    }));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -274,7 +310,7 @@ export default function Inventory() {
 
   return (
     <PullToRefresh onRefresh={loadItems}>
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-6">
+    <div className="min-h-screen bg-slate-50/85 dark:bg-slate-900/85 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
@@ -438,7 +474,14 @@ export default function Inventory() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Brand</Label>
-                <Input value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} placeholder="Brand" />
+                <Input
+                  value={form.brand}
+                  onChange={(e) => {
+                    setSelectedBrandChartId('');
+                    setForm({ ...form, brand: e.target.value });
+                  }}
+                  placeholder="Brand"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Style</Label>
@@ -473,7 +516,10 @@ export default function Inventory() {
               <Label>Category</Label>
               <Input
                 value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                onChange={(e) => {
+                  setSelectedBrandChartId('');
+                  setForm({ ...form, category: e.target.value });
+                }}
                 placeholder="e.g. Shirts, Pants, Accessories"
               />
             </div>
@@ -602,15 +648,58 @@ export default function Inventory() {
             </div>
 
             <div className="space-y-2">
-              <Label>Brand / Product Size Chart (JSON)</Label>
+              <Label>Verified Brand Size Chart</Label>
+              <select
+                value={selectedBrandChartId}
+                onChange={(e) => applyVerifiedChart(e.target.value)}
+                className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                disabled={!form.brand || availableBrandCharts.length === 0}
+              >
+                <option value="">
+                  {!form.brand
+                    ? 'Enter a brand first'
+                    : availableBrandCharts.length
+                      ? 'Select a verified chart (optional)'
+                      : 'No verified chart currently available'}
+                </option>
+                {availableBrandCharts.map(chart => (
+                  <option key={chart.id} value={chart.id}>
+                    {chart.audience} • {chart.chart_name} • {chart.region}
+                  </option>
+                ))}
+              </select>
+              {selectedBrandChart && (
+                <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800">
+                  Loaded {selectedBrandChart.entries?.length || 0} verified size rows from {selectedBrandChart.brand_name}.
+                  {' '}
+                  <a
+                    href={selectedBrandChart.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-medium"
+                  >
+                    Official source
+                  </a>
+                </div>
+              )}
+              <p className="text-xs text-slate-500">
+                Selecting a verified chart copies its centimeter measurements into this product. You can still edit the product chart below when a specific garment differs from the brand standard.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Product Size Chart Override (JSON)</Label>
               <Textarea
                 value={form.size_chart_json}
-                onChange={(e) => setForm({ ...form, size_chart_json: e.target.value })}
+                onChange={(e) => {
+                  setSelectedBrandChartId('');
+                  setForm({ ...form, size_chart_json: e.target.value });
+                }}
                 rows={7}
                 className="font-mono text-xs"
                 placeholder={'[{"size":"M","chest_min_cm":94,"chest_max_cm":102,"waist_min_cm":80,"waist_max_cm":88}]'}
               />
-              <p className="text-xs text-slate-500">Use centimeters. These ranges drive customer-specific “Best match” sizing.</p>
+              <p className="text-xs text-slate-500">Use centimeters. Product-specific values override the general brand catalog after this item syncs to The Concierge.</p>
             </div>
 
             <div className="space-y-2">
