@@ -180,6 +180,12 @@
           },
           "cup_size": {
             "type": "string"
+          },
+          "head_circumference_min_cm": {
+            "type": "number"
+          },
+          "head_circumference_max_cm": {
+            "type": "number"
           }
         }
       }
@@ -214,7 +220,11 @@
         "business",
         "casual",
         "nightlife",
-        "trendy"
+        "trendy",
+        "formal",
+        "evening",
+        "outdoor",
+        "active"
       ]
     },
     "processed_stock_events": {
