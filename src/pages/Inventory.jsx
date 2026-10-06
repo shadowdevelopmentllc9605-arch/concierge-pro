@@ -16,11 +16,13 @@ const normalizeBrandKey = (value = '') => String(value).toLowerCase().replace(/[
 
 const inferCategoryGroup = (category = '') => {
   const value = String(category).toLowerCase();
+  if (/underwear|brief|boxer|bra|panty|lingerie|bralette|sleepwear/.test(value)) return 'underwear';
+  if (/suit|tuxedo|formal jacket/.test(value)) return 'suits';
   if (/pant|jean|short|khaki|trouser|bottom/.test(value)) return 'bottoms';
   if (/dress|skirt|jumper/.test(value)) return 'dresses';
   if (/shoe|boot|sneaker|footwear/.test(value)) return 'footwear';
   if (/jacket|coat|outerwear/.test(value)) return 'outerwear';
-  if (/shirt|top|tee|t-shirt|polo|suit|vest|blouse|sweater|hoodie/.test(value)) return 'tops';
+  if (/shirt|top|tee|t-shirt|polo|vest|blouse|sweater|hoodie/.test(value)) return 'tops';
   return '';
 };
 
