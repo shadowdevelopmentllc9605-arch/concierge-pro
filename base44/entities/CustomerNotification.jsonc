@@ -67,18 +67,9 @@
           "data.business_id": "{{user.data.business_id}}"
         },
         {
-          "$or": [
-            {
-              "user_condition": {
-                "data.vendor_role": "manager"
-              }
-            },
-            {
-              "user_condition": {
-                "data.vendor_permissions.send_notifications": true
-              }
-            }
-          ]
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
         }
       ]
     },
@@ -91,18 +82,9 @@
           "data.business_id": "{{user.data.business_id}}"
         },
         {
-          "$or": [
-            {
-              "user_condition": {
-                "data.vendor_role": "manager"
-              }
-            },
-            {
-              "user_condition": {
-                "data.vendor_permissions.send_notifications": true
-              }
-            }
-          ]
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
         }
       ]
     },
@@ -112,18 +94,9 @@
           "data.business_id": "{{user.data.business_id}}"
         },
         {
-          "$or": [
-            {
-              "user_condition": {
-                "data.vendor_role": "manager"
-              }
-            },
-            {
-              "user_condition": {
-                "data.vendor_permissions.send_notifications": true
-              }
-            }
-          ]
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
         }
       ]
     }

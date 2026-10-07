@@ -1,0 +1,51 @@
+{
+  "version": "2026-10-07-standalone-brand-layer-summary",
+  "as_of": "2026-10-07T16:05:00Z",
+  "completed_batches": [
+    {
+      "batch": "001",
+      "candidates_checked": 100,
+      "already_present": 42,
+      "added": 58
+    },
+    {
+      "batch": "002",
+      "candidates_checked": 203,
+      "already_present": 146,
+      "added": 57
+    },
+    {
+      "batch": "003",
+      "candidates_checked": 206,
+      "already_present": 87,
+      "added": 111,
+      "intentionally_not_added": 8
+    },
+    {
+      "batch": "004",
+      "initial_candidates_checked": 159,
+      "already_present": 47,
+      "initially_missing": 112,
+      "added_from_initial_missing": 99,
+      "extra_current_house_labels_added": 4,
+      "total_added": 103,
+      "held_for_verification": 13
+    }
+  ],
+  "cumulative_initial_candidate_checks": 668,
+  "cumulative_new_brand_records_added": 329,
+  "policy": {
+    "brand_presence_independent_of_sizing": true,
+    "generic_fallback": "measurement-driven low-confidence S/M/L/XL for compatible apparel",
+    "verified_product_or_brand_sizing_overrides_fallback": true,
+    "storefronts_are_not_product_brands_unless_current_house_label_is_confirmed": true
+  },
+  "next_focus": [
+    "resolve the 13 held batch-004 candidates with stronger current-source verification",
+    "additional adaptive and sensory-friendly labels",
+    "workwear and western private labels",
+    "technical run/hike/snow specialty brands",
+    "children's sleepwear and occasionwear boutiques",
+    "emerging designers entering wholesale or multi-brand distribution"
+  ]
+}

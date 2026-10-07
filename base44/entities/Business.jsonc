@@ -7,12 +7,10 @@
       "description": "Business name"
     },
     "logo_url": {
-      "type": "string",
-      "description": "Business logo/picture URL"
+      "type": "string"
     },
     "floor_plan_url": {
-      "type": "string",
-      "description": "Floor plan image URL"
+      "type": "string"
     },
     "address": {
       "type": "string"
@@ -24,36 +22,142 @@
       "type": "string"
     },
     "owner_user_id": {
-      "type": "string",
-      "description": "Base44 user ID of the business owner"
+      "type": "string"
     },
     "owner_email": {
-      "type": "string",
-      "description": "Email of the business owner"
+      "type": "string"
     },
     "tax_rate": {
       "type": "number",
-      "default": 0,
-      "description": "Store sales-tax rate as a percentage, e.g. 7.25"
+      "default": 0
     },
     "setup_complete": {
       "type": "boolean",
       "default": false
     },
     "open_procedures": {
-      "type": "string",
-      "description": "Opening procedures text"
+      "type": "string"
     },
     "close_procedures": {
-      "type": "string",
-      "description": "Closing procedures text"
+      "type": "string"
     },
     "linked_customer_app_id": {
-      "type": "string",
-      "description": "Link to customer-facing Concierge app"
+      "type": "string"
     },
     "default_location_id": {
       "type": "string"
+    },
+    "stripe_connected_account_id": {
+      "type": "string",
+      "description": "Server-managed Stripe Connect account ID",
+      "rls": {
+        "write": false
+      }
+    },
+    "stripe_onboarding_complete": {
+      "type": "boolean",
+      "default": false,
+      "rls": {
+        "write": false
+      }
+    },
+    "stripe_charges_enabled": {
+      "type": "boolean",
+      "default": false,
+      "rls": {
+        "write": false
+      }
+    },
+    "stripe_payouts_enabled": {
+      "type": "boolean",
+      "default": false,
+      "rls": {
+        "write": false
+      }
+    },
+    "stripe_transfers_enabled": {
+      "type": "boolean",
+      "default": false,
+      "rls": {
+        "write": false
+      }
+    },
+    "stripe_customer_id": {
+      "type": "string",
+      "description": "Stripe customer used for Concierge Pro Billing",
+      "rls": {
+        "write": false
+      }
+    },
+    "stripe_subscription_id": {
+      "type": "string",
+      "rls": {
+        "write": false
+      }
+    },
+    "stripe_subscription_status": {
+      "type": "string",
+      "rls": {
+        "write": false
+      }
+    },
+    "stripe_subscription_current_period_end": {
+      "type": "string",
+      "format": "date-time",
+      "rls": {
+        "write": false
+      }
+    },
+    "stripe_subscription_cancel_at_period_end": {
+      "type": "boolean",
+      "default": false,
+      "rls": {
+        "write": false
+      }
+    },
+    "billing_plan": {
+      "type": "string",
+      "enum": [
+        "founding",
+        "standard"
+      ],
+      "rls": {
+        "write": false
+      }
+    },
+    "billing_price_id": {
+      "type": "string",
+      "rls": {
+        "write": false
+      }
+    },
+    "billing_location_quantity": {
+      "type": "number",
+      "default": 1,
+      "rls": {
+        "write": false
+      }
+    },
+    "founding_started_at": {
+      "type": "string",
+      "format": "date-time",
+      "rls": {
+        "write": false
+      }
+    },
+    "founding_expires_at": {
+      "type": "string",
+      "format": "date-time",
+      "rls": {
+        "write": false
+      }
+    },
+    "platform_fee_percent": {
+      "type": "number",
+      "default": 4,
+      "rls": {
+        "write": false
+      }
     }
   },
   "required": [

@@ -13,14 +13,22 @@ async function getSyncToken(base44: any) {
 export default async function (req: Request): Promise<Response> {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    const user = await base44.auth.me().catch(() => null);
     if (!user?.business_id || user?.vendor_role !== "manager") {
       return Response.json({ error: "Manager access required" }, { status: 403 });
     }
 
     const businesses = await base44.asServiceRole.entities.Business.filter({ id: user.business_id });
     const business = businesses[0];
-    if (!business || business.owner_user_id !== user.id) {
+    // Ownership is verified against the built-in creator stamp (created_by_id),
+    // which app users cannot edit — a manager who rewrote the client-settable
+    // owner_user_id field (e.g. from the settings form) fails this check.
+    const isOwner = Boolean(
+      business &&
+      business.created_by_id === user.id &&
+      (!business.owner_user_id || business.owner_user_id === user.id),
+    );
+    if (!isOwner) {
       return Response.json({ error: "Only the business owner can delete the business" }, { status: 403 });
     }
 

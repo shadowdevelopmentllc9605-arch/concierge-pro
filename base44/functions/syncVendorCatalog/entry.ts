@@ -10,7 +10,7 @@ async function getToken(base44: any) {
 export default async function (req: Request): Promise<Response> {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    const user = await base44.auth.me().catch(() => null);
     if (!user?.business_id || user?.vendor_role !== "manager") {
       return Response.json({ error: "Manager access required" }, { status: 403 });
     }
@@ -84,7 +84,14 @@ export default async function (req: Request): Promise<Response> {
     for (const mapping of result.mappings || []) {
       const inventory = await base44.asServiceRole.entities.InventoryItem.filter({ id: mapping.inventoryId, business_id: user.business_id });
       if (inventory[0]) {
-        await base44.asServiceRole.entities.InventoryItem.update(inventory[0].id, { linked_product_id: mapping.productId });
+        await base44.asServiceRole.entities.InventoryItem.update(inventory[0].id, {
+          linked_product_id: mapping.productId,
+          product_master_id: mapping.productMasterId || "",
+          canonical_variant_ids: mapping.variantIds || [],
+          retailer_offer_ids: mapping.offerIds || [],
+          catalog_migration_status: mapping.productMasterId ? "linked" : "needs_review",
+          catalog_migrated_at: new Date().toISOString(),
+        });
       }
     }
 

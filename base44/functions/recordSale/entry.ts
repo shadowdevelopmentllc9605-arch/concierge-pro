@@ -1,4 +1,7 @@
 import { createClientFromRequest } from "npm:@base44/sdk";
+import Stripe from "npm:stripe@23.0.0";
+import { secrets } from "base44:runtime";
+import { getActiveEmployee } from "../../shared/employeeAccess.ts";
 
 const CUSTOMER_APP_ID = "698951bc103c5b61b68d35b7";
 
@@ -14,10 +17,11 @@ function hasCheckoutAccess(user: any) {
   );
 }
 
-function getVariant(item: any, size?: string, color?: string) {
+function getVariant(item: any, size?: string, color?: string, widthCode?: string) {
   if (!Array.isArray(item.variants) || item.variants.length === 0) return null;
   return item.variants.find((variant: any) =>
     String(variant.size || "") === String(size || "") &&
+    String(variant.width_code || "") === String(widthCode || "") &&
     String(variant.color || "") === String(color || "")
   ) || null;
 }
@@ -25,9 +29,14 @@ function getVariant(item: any, size?: string, color?: string) {
 export default async function (req: Request): Promise<Response> {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    const user = await base44.auth.me().catch(() => null);
     if (!hasCheckoutAccess(user)) {
       return Response.json({ error: "Checkout permission required" }, { status: 403 });
+    }
+
+    // Employee.status is authoritative: reject deactivated/missing memberships.
+    if (!(await getActiveEmployee(base44, user))) {
+      return Response.json({ error: "Vendor membership is inactive" }, { status: 403 });
     }
 
     const body = await req.json();
@@ -81,12 +90,12 @@ export default async function (req: Request): Promise<Response> {
       if (!item) return Response.json({ error: "An inventory item could not be found" }, { status: 404 });
 
       const quantity = Math.max(1, Math.floor(Number(requested.quantity || 1)));
-      const variant = getVariant(item, requested.size, requested.color);
+      const variant = getVariant(item, requested.size, requested.color, requested.width_code);
       let available = Number(item.stock_quantity || 0);
 
       if (Array.isArray(item.variants) && item.variants.length > 0) {
         if (!variant) {
-          return Response.json({ error: `Choose a valid size/color combination for ${item.name}` }, { status: 400 });
+          return Response.json({ error: `Choose a valid size/width/color combination for ${item.name}` }, { status: 400 });
         }
         available = Number(variant.stock_quantity || 0);
       }
@@ -100,6 +109,29 @@ export default async function (req: Request): Promise<Response> {
 
     const subtotal = resolved.reduce((sum, row) => sum + Number(row.item.price || 0) * row.quantity, 0);
     const discountAmount = subtotal * (discountPercent / 100);
+
+    // A store sale is Concierge-attributed when the linked shopper visited this
+    // retailer through The Concierge within the prior 7 days. The success fee is
+    // charged on merchandise after discounts, never on tax.
+    const attributionCutoff = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    let attributedVisit: any = null;
+    if (customer.linked_customer_id) {
+      const visits = await base44.asServiceRole.entities.StoreVisit.filter({
+        customer_id: customer.id,
+        business_id: user.business_id,
+      });
+      attributedVisit = visits
+        .filter((visit: any) => {
+          const enteredAt = Date.parse(visit.entered_at || "");
+          return Number.isFinite(enteredAt) && enteredAt >= attributionCutoff;
+        })
+        .sort((a: any, b: any) => Date.parse(b.entered_at || "") - Date.parse(a.entered_at || ""))[0] || null;
+    }
+    const conciergeAttributed = Boolean(attributedVisit);
+    const platformFeePercent = conciergeAttributed ? 4 : 0;
+    const platformFeeAmount = conciergeAttributed
+      ? Math.round(Math.max(0, subtotal - discountAmount) * 0.04 * 100) / 100
+      : 0;
 
     let taxRate = 0;
     if (locationId) {
@@ -132,6 +164,7 @@ export default async function (req: Request): Promise<Response> {
           quantity: row.quantity,
           price: Number(row.item.price || 0),
           size: row.requested.size || "",
+          width_code: row.requested.width_code || "",
           color: row.requested.color || "",
         })),
         subtotal,
@@ -141,13 +174,19 @@ export default async function (req: Request): Promise<Response> {
         payment_method: "cash",
         payment_provider: "cash",
         status: "processing",
+        concierge_attributed: conciergeAttributed,
+        attribution_source: conciergeAttributed ? "concierge_store_visit" : "none",
+        attribution_event_id: attributedVisit?.id || attributedVisit?.external_checkin_id || "",
+        platform_fee_percent: platformFeePercent,
+        platform_fee_amount: platformFeeAmount,
+        platform_fee_status: conciergeAttributed ? "accrued" : "not_applicable",
         synced_to_customer: false,
       });
     }
 
     for (const row of resolved) {
       const item = row.item;
-      const stockEventKey = `cash:${externalPurchaseId}:${item.id}:${row.requested.size || ""}:${row.requested.color || ""}`;
+      const stockEventKey = `cash:${externalPurchaseId}:${item.id}:${row.requested.size || ""}:${row.requested.width_code || ""}:${row.requested.color || ""}`;
       const processed = Array.isArray(item.processed_stock_events)
         ? item.processed_stock_events
         : [];
@@ -181,14 +220,56 @@ export default async function (req: Request): Promise<Response> {
         quantity: row.quantity,
         price: Number(row.item.price || 0),
         size: row.requested.size || "",
+        width_code: row.requested.width_code || "",
         color: row.requested.color || "",
       })),
       subtotal,
       tax,
       discount: discountAmount,
       total,
+      concierge_attributed: conciergeAttributed,
+      attribution_source: conciergeAttributed ? "concierge_store_visit" : "none",
+      attribution_event_id: attributedVisit?.id || attributedVisit?.external_checkin_id || "",
+      platform_fee_percent: platformFeePercent,
+      platform_fee_amount: platformFeeAmount,
+      platform_fee_status: conciergeAttributed ? "accrued" : "not_applicable",
       status: "completed",
     });
+
+    if (conciergeAttributed && platformFeeAmount > 0) {
+      try {
+        const businesses = await base44.asServiceRole.entities.Business.filter({ id: user.business_id });
+        const business = businesses[0];
+        const stripeSecret = secrets.get("STRIPE_SECRET_KEY");
+        if (business?.stripe_customer_id && stripeSecret) {
+          const stripe = new Stripe(stripeSecret);
+          const invoiceItem = await stripe.invoiceItems.create(
+            {
+              customer: business.stripe_customer_id,
+              amount: Math.round(platformFeeAmount * 100),
+              currency: "usd",
+              description: `4% Concierge-attributed sale fee · sale ${externalPurchaseId}`,
+              metadata: {
+                concierge_platform_fee: "true",
+                concierge_pro_business_id: user.business_id,
+                concierge_external_purchase_id: externalPurchaseId,
+                concierge_attribution_source: "concierge_store_visit",
+                concierge_platform_fee_percent: "4",
+              },
+            },
+            { idempotencyKey: `concierge-platform-fee-${externalPurchaseId}` },
+          );
+          await base44.asServiceRole.entities.Purchase.update(purchase.id, {
+            platform_fee_invoice_item_id: invoiceItem.id,
+            platform_fee_status: "accrued",
+          });
+        }
+      } catch (feeError) {
+        // The retail sale remains valid if fee invoicing is temporarily unavailable.
+        // The accrued fee stays on the Purchase record so it can be reconciled/retried.
+        console.warn("Unable to add attributed-sale fee to Stripe invoice", feeError);
+      }
+    }
 
     const purchasedIds = new Set(resolved.map(row => row.item.id));
     const spendEvent = `cash:${externalPurchaseId}`;
@@ -235,12 +316,13 @@ export default async function (req: Request): Promise<Response> {
         items: resolved.map(row => ({
           inventory_item_id: row.item.id,
           product_id: row.item.linked_product_id || "",
-          line_key: `${externalPurchaseId}:${row.item.id}:${row.requested.size || ""}:${row.requested.color || ""}`,
+          line_key: `${externalPurchaseId}:${row.item.id}:${row.requested.size || ""}:${row.requested.width_code || ""}:${row.requested.color || ""}`,
           name: row.item.name,
           image: row.item.images?.[0] || "",
           price: Number(row.item.price || 0),
           quantity: row.quantity,
           size: row.requested.size || "",
+          width_code: row.requested.width_code || "",
           color: row.requested.color || "",
         })),
       });
@@ -313,6 +395,12 @@ export default async function (req: Request): Promise<Response> {
       tax,
       taxRate,
       total,
+      conciergeAttributed,
+      attributionSource: conciergeAttributed ? "concierge_store_visit" : "none",
+      attributionWindowDays: 7,
+      platformFeePercent,
+      platformFeeAmount,
+      platformFeeStatus: conciergeAttributed ? "accrued" : "not_applicable",
       customerSync,
     });
   } catch (error) {

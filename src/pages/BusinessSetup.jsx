@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Building2, Upload, MapPin, Check, ArrowRight, Loader2, Trash2 } from 'lucide-react';
+import { Building2, Upload, MapPin, Check, ArrowRight, Loader2, Trash2, CreditCard, RefreshCw, Landmark, BadgeDollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,6 +16,8 @@ export default function BusinessSetup() {
   const [saving, setSaving] = useState(false);
   const [business, setBusiness] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [stripeBusy, setStripeBusy] = useState('');
+  const [stripeError, setStripeError] = useState('');
   const [form, setForm] = useState({
     name: '',
     logo_url: '',
@@ -31,6 +33,13 @@ export default function BusinessSetup() {
 
   useEffect(() => {
     loadBusiness();
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('stripe') === 'return' || params.get('billing') === 'success') {
+      refreshStripeStatus(true);
+    }
   }, []);
 
   const loadBusiness = async () => {
@@ -85,13 +94,17 @@ export default function BusinessSetup() {
     setSaving(true);
     try {
       const userData = await base44.auth.me();
-      const data = {
+      const data = /** @type {any} */ ({
         ...form,
         tax_rate: Math.max(0, parseFloat(form.tax_rate) || 0),
-        owner_user_id: userData.id,
-        owner_email: userData.email,
         setup_complete: step >= 3,
-      };
+      });
+      // Ownership is set only at creation and never client-updated: a manager
+      // saving the settings form must not overwrite who owns the business.
+      if (!business) {
+        data.owner_user_id = userData.id;
+        data.owner_email = userData.email;
+      }
 
       let savedBusiness = business;
       if (business) {
@@ -110,6 +123,62 @@ export default function BusinessSetup() {
       console.error(err);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const refreshStripeStatus = async (syncCustomerApp = false) => {
+    setStripeBusy('refresh');
+    setStripeError('');
+    try {
+      const response = await base44.functions.invoke('refreshStripeBusinessStatus', {});
+      const result = response?.data || response;
+      if (!result?.success) throw new Error(result?.error || 'Stripe status could not be refreshed.');
+
+      if (syncCustomerApp) {
+        try {
+          await base44.functions.invoke('syncVendorCatalog', {});
+        } catch (syncError) {
+          console.warn('Stripe status refreshed, but customer-app sync is pending.', syncError);
+        }
+      }
+      await loadBusiness();
+      return result;
+    } catch (err) {
+      console.error(err);
+      setStripeError(err?.response?.data?.error || err?.message || 'Stripe status could not be refreshed.');
+      return null;
+    } finally {
+      setStripeBusy('');
+    }
+  };
+
+  const startStripeOnboarding = async () => {
+    setStripeBusy('connect');
+    setStripeError('');
+    try {
+      const response = await base44.functions.invoke('createConnectOnboarding', {});
+      const result = response?.data || response;
+      if (!result?.success || !result?.url) throw new Error(result?.error || 'Stripe onboarding could not be started.');
+      window.location.assign(result.url);
+    } catch (err) {
+      console.error(err);
+      setStripeError(err?.response?.data?.error || err?.message || 'Stripe onboarding could not be started.');
+      setStripeBusy('');
+    }
+  };
+
+  const startBilling = async (plan) => {
+    setStripeBusy(plan);
+    setStripeError('');
+    try {
+      const response = await base44.functions.invoke('createVendorBillingCheckout', { plan });
+      const result = response?.data || response;
+      if (!result?.success || !result?.url) throw new Error(result?.error || 'Subscription checkout could not be started.');
+      window.location.assign(result.url);
+    } catch (err) {
+      console.error(err);
+      setStripeError(err?.response?.data?.error || err?.message || 'Subscription checkout could not be started.');
+      setStripeBusy('');
     }
   };
 
@@ -152,7 +221,7 @@ export default function BusinessSetup() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 py-12">
+    <div className="min-h-screen bg-slate-50/85 py-12">
       <div className="max-w-2xl mx-auto px-6">
         {/* Progress */}
         <div className="flex items-center justify-center gap-2 mb-12">
@@ -326,7 +395,80 @@ export default function BusinessSetup() {
                   <Check className="w-10 h-10 text-emerald-600" />
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Your business is set up!</h3>
-                <p className="text-slate-600 mb-6">Next, add your employees and inventory to get started.</p>
+                <p className="text-slate-600 mb-6">Finish Stripe setup, then add employees and inventory.</p>
+
+                <div className="text-left rounded-2xl border border-violet-200 bg-violet-50 p-5 mb-5">
+                  <div className="flex items-start gap-3">
+                    <BadgeDollarSign className="w-6 h-6 text-violet-700 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-violet-950">Concierge Pro launch pricing</p>
+                      <p className="text-sm text-violet-800 mt-1">$149/month per location + 4% only on Concierge-attributed merchandise sales.</p>
+                      <p className="text-xs text-violet-700 mt-1">Founding Retailers: $99/month per location for the first 12 months (first 20 qualifying retailers).</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-left rounded-2xl border p-5 mb-5 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <Landmark className="w-5 h-5 text-slate-600" />
+                      <div>
+                        <p className="font-medium">Retailer payouts</p>
+                        <p className="text-xs text-slate-500">
+                          {business?.stripe_onboarding_complete && (business?.stripe_transfers_enabled || business?.stripe_payouts_enabled)
+                            ? 'Stripe Connect is ready to receive marketplace proceeds.'
+                            : 'Connect Stripe so The Concierge can route shopper proceeds to your store.'}
+                        </p>
+                      </div>
+                    </div>
+                    {business?.stripe_onboarding_complete && (business?.stripe_transfers_enabled || business?.stripe_payouts_enabled) ? (
+                      <span className="text-xs font-semibold text-emerald-700">Ready</span>
+                    ) : (
+                      <Button size="sm" onClick={startStripeOnboarding} disabled={Boolean(stripeBusy)}>
+                        {stripeBusy === 'connect' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        Connect Stripe
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="border-t pt-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <CreditCard className="w-5 h-5 text-slate-600" />
+                      <div>
+                        <p className="font-medium">Concierge Pro subscription</p>
+                        <p className="text-xs text-slate-500">
+                          {['active', 'trialing'].includes(business?.stripe_subscription_status)
+                            ? `${business?.billing_plan === 'founding' ? 'Founding Retailer' : 'Standard'} plan active${business?.billing_location_quantity ? ` · ${business.billing_location_quantity} location${business.billing_location_quantity === 1 ? '' : 's'}` : ''}.`
+                            : 'Choose the launch plan for this business.'}
+                        </p>
+                      </div>
+                    </div>
+                    {['active', 'trialing'].includes(business?.stripe_subscription_status) ? (
+                      <span className="text-xs font-semibold text-emerald-700">Active</span>
+                    ) : null}
+                  </div>
+
+                  {!['active', 'trialing'].includes(business?.stripe_subscription_status) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <Button variant="outline" onClick={() => startBilling('founding')} disabled={Boolean(stripeBusy)}>
+                        {stripeBusy === 'founding' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        Founding · $99/mo
+                      </Button>
+                      <Button onClick={() => startBilling('standard')} disabled={Boolean(stripeBusy)}>
+                        {stripeBusy === 'standard' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        Standard · $149/mo
+                      </Button>
+                    </div>
+                  )}
+
+                  <Button variant="ghost" size="sm" className="w-full" onClick={() => refreshStripeStatus(true)} disabled={Boolean(stripeBusy)}>
+                    {stripeBusy === 'refresh' ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                    Refresh Stripe status
+                  </Button>
+
+                  {stripeError && <p className="text-sm text-red-600">{stripeError}</p>}
+                </div>
+
                 <div className="flex flex-col gap-3">
                   <Button onClick={() => navigate(createPageUrl('Employees'))} variant="outline" className="w-full">
                     Add Employees

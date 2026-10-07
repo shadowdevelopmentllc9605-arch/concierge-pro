@@ -1,5 +1,4 @@
 import { base44 } from '@/api/base44Client';
-import { sharedBackendBridge } from '@/lib/sharedBackendBridge';
 
 export const MANAGER_PERMISSIONS = {
   view_metrics: true,
@@ -14,7 +13,8 @@ export const MANAGER_PERMISSIONS = {
 async function refreshTrustedMembership(user) {
   if (user?.business_id && user?.vendor_role) return user;
 
-  const result = await sharedBackendBridge.claimVendorMembership();
+  const response = await base44.functions.invoke('claimVendorMembership', {});
+  const result = response?.data || response;
   if (!result?.businessId) return user;
 
   return base44.auth.me();

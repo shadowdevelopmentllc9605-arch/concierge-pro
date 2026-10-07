@@ -1,4 +1,5 @@
 import { createClientFromRequest } from "npm:@base44/sdk";
+import { getActiveEmployee } from "../../shared/employeeAccess.ts";
 
 const CUSTOMER_APP_ID = "698951bc103c5b61b68d35b7";
 
@@ -10,8 +11,13 @@ async function getToken(base44: any) {
 export default async function (req: Request): Promise<Response> {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    const user = await base44.auth.me().catch(() => null);
     if (!user?.business_id) return Response.json({ error: "Vendor membership required" }, { status: 403 });
+
+    // Employee.status is authoritative: reject deactivated/missing memberships.
+    if (!(await getActiveEmployee(base44, user))) {
+      return Response.json({ error: "Vendor membership is inactive" }, { status: 403 });
+    }
 
     const token = await getToken(base44);
     if (!token) return Response.json({ error: "Integration is not configured" }, { status: 409 });

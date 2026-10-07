@@ -1,10 +1,29 @@
 import { createClientFromRequest } from "npm:@base44/sdk";
 
+// Constant-time comparison: hash both values and compare every byte of the
+// digests regardless of where a mismatch occurs, so response timing leaks
+// nothing about the stored token.
+function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  let diff = a.length ^ b.length;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    diff |= (a[i] ?? 0) ^ (b[i] ?? 0);
+  }
+  return diff === 0;
+}
+
+async function sha256(value: string): Promise<Uint8Array> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return new Uint8Array(digest);
+}
+
 async function authorize(base44: any, req: Request) {
   const configs = await base44.asServiceRole.entities.IntegrationConfig.filter({ key: "cross_app_sync", enabled: true });
   const expected = configs[0]?.token;
   const provided = req.headers.get("x-concierge-sync-secret");
-  return Boolean(expected && provided && expected === provided);
+  if (!expected || !provided) return false;
+  const [expectedHash, providedHash] = await Promise.all([sha256(expected), sha256(provided)]);
+  return timingSafeEqual(expectedHash, providedHash);
 }
 
 export default async function (req: Request): Promise<Response> {
@@ -142,7 +161,7 @@ export default async function (req: Request): Promise<Response> {
     }
 
     if (action === "onlinePurchase") {
-      const { businessId, externalOrderId, customer, items = [], orderTotals = {} } = body;
+      const { businessId, externalOrderId, customer, items = [], orderTotals = {}, attribution = {} } = body;
       if (!businessId || !externalOrderId || !customer?.user_id || !items.length) {
         return Response.json({ error: "Missing online purchase data" }, { status: 400 });
       }
@@ -187,6 +206,12 @@ export default async function (req: Request): Promise<Response> {
           status: "processing",
           business_id: businessId,
           external_purchase_id: externalOrderId,
+          concierge_attributed: Boolean(attribution.attributed),
+          attribution_source: attribution.source || "concierge_online",
+          attribution_event_id: externalOrderId,
+          platform_fee_percent: Number(attribution.platformFeePercent || 4),
+          platform_fee_amount: Number(attribution.platformFeeAmount || 0),
+          platform_fee_status: attribution.platformFeeStatus || "collected",
           synced_to_customer: true,
         });
       } else if (purchase.status === "completed") {
@@ -209,7 +234,7 @@ export default async function (req: Request): Promise<Response> {
 
         const quantity = Math.max(1, Math.floor(Number(incoming.quantity || 1)));
         const price = Number(incoming.price ?? inventory.price ?? 0);
-        const stockEventKey = `online:${externalOrderId}:${incoming.line_key || [incoming.product_id, incoming.size, incoming.color].join(":")}`;
+        const stockEventKey = `online:${externalOrderId}:${incoming.line_key || [incoming.product_id, incoming.size, incoming.width_code, incoming.color].join(":")}`;
         const processed = Array.isArray(inventory.processed_stock_events)
           ? inventory.processed_stock_events
           : [];
@@ -224,11 +249,12 @@ export default async function (req: Request): Promise<Response> {
             update.variants = inventory.variants.map((variant: any) => {
               if (
                 String(variant.size || "") === String(incoming.size || "") &&
+                String(variant.width_code || "") === String(incoming.width_code || "") &&
                 String(variant.color || "") === String(incoming.color || "")
               ) {
                 matched = true;
                 const before = Math.max(0, Number(variant.stock_quantity || 0));
-                if (quantity > before) warnings.push(`Oversold ${inventory.name} ${incoming.size || ""} ${incoming.color || ""}`.trim());
+                if (quantity > before) warnings.push(`Oversold ${inventory.name} ${incoming.size || ""} ${incoming.width_code || ""} ${incoming.color || ""}`.trim());
                 return { ...variant, stock_quantity: Math.max(0, before - quantity) };
               }
               return variant;
@@ -253,6 +279,7 @@ export default async function (req: Request): Promise<Response> {
           quantity,
           price,
           size: incoming.size || "",
+          width_code: incoming.width_code || "",
           color: incoming.color || "",
         });
       }
@@ -272,6 +299,12 @@ export default async function (req: Request): Promise<Response> {
         shipping: Number(orderTotals.shipping || 0),
         discount: Number(orderTotals.discount || 0),
         total: Number(orderTotals.total || 0),
+        concierge_attributed: Boolean(attribution.attributed),
+        attribution_source: attribution.source || "concierge_online",
+        attribution_event_id: externalOrderId,
+        platform_fee_percent: Number(attribution.platformFeePercent || 4),
+        platform_fee_amount: Number(attribution.platformFeeAmount || 0),
+        platform_fee_status: attribution.platformFeeStatus || "collected",
         status: "completed",
         sync_error: warnings.join(" | "),
       });
@@ -293,6 +326,25 @@ export default async function (req: Request): Promise<Response> {
         purchaseId: purchase.id,
         warnings,
       });
+    }
+
+    if (action === "onlineRefund") {
+      const { businessId, externalOrderId, platformFeeStatus, platformFeeAmount } = body;
+      if (!businessId || !externalOrderId) {
+        return Response.json({ error: "Missing online refund data" }, { status: 400 });
+      }
+      const purchases = await base44.asServiceRole.entities.Purchase.filter({
+        business_id: businessId,
+        external_purchase_id: externalOrderId,
+      });
+      if (purchases[0]) {
+        await base44.asServiceRole.entities.Purchase.update(purchases[0].id, {
+          status: "refunded",
+          platform_fee_status: platformFeeStatus || "refunded",
+          platform_fee_amount: Number(platformFeeAmount ?? purchases[0].platform_fee_amount ?? 0),
+        });
+      }
+      return Response.json({ success: true, purchaseId: purchases[0]?.id || "" });
     }
 
     if (action === "checkout") {

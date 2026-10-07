@@ -186,6 +186,24 @@
           },
           "head_circumference_max_cm": {
             "type": "number"
+          },
+          "foot_width_min_cm": {
+            "type": "number"
+          },
+          "foot_width_max_cm": {
+            "type": "number"
+          },
+          "calf_circumference_min_cm": {
+            "type": "number"
+          },
+          "calf_circumference_max_cm": {
+            "type": "number"
+          },
+          "width_code": {
+            "type": "string"
+          },
+          "width_label": {
+            "type": "string"
           }
         }
       }
@@ -207,6 +225,9 @@
           "stock_quantity": {
             "type": "number",
             "default": 0
+          },
+          "width_code": {
+            "type": "string"
           }
         }
       }
@@ -232,6 +253,239 @@
       "items": {
         "type": "string"
       }
+    },
+    "footwear_type": {
+      "type": "string",
+      "enum": [
+        "all",
+        "athletic_running",
+        "athletic_training",
+        "walking",
+        "casual_sneaker",
+        "dress_oxford_derby",
+        "loafer_slipon",
+        "boot_work",
+        "boot_hiking",
+        "boot_fashion",
+        "sandal",
+        "heel_pump",
+        "other"
+      ],
+      "default": "all"
+    },
+    "width_options": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "footwear_fit": {
+      "type": "object",
+      "properties": {
+        "last_name": {
+          "type": "string"
+        },
+        "fit_profile": {
+          "type": "string",
+          "enum": [
+            "true_to_size",
+            "snug",
+            "roomy",
+            "runs_small",
+            "runs_large",
+            "unknown"
+          ],
+          "default": "unknown"
+        },
+        "size_adjustment_steps": {
+          "type": "number"
+        },
+        "sock_profile": {
+          "type": "string",
+          "enum": [
+            "thin",
+            "standard",
+            "thick",
+            "varies",
+            "not_applicable"
+          ],
+          "default": "not_applicable"
+        },
+        "fit_notes": {
+          "type": "string"
+        }
+      }
+    },
+    "size_chart_measurement_basis": {
+      "type": "string",
+      "enum": [
+        "body",
+        "garment",
+        "mixed",
+        "unknown"
+      ],
+      "default": "body",
+      "description": "Whether the size chart describes wearer body dimensions or finished garment dimensions."
+    },
+    "garment_fit": {
+      "type": "object",
+      "properties": {
+        "fit_cut": {
+          "type": "string",
+          "enum": [
+            "compression",
+            "skinny",
+            "slim",
+            "tailored",
+            "regular",
+            "relaxed",
+            "oversized",
+            "unknown"
+          ],
+          "default": "unknown"
+        },
+        "stretch_level": {
+          "type": "string",
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "unknown"
+          ],
+          "default": "unknown"
+        },
+        "fabric_behavior": {
+          "type": "string",
+          "enum": [
+            "rigid",
+            "structured",
+            "draped",
+            "stretchy",
+            "mixed",
+            "unknown"
+          ],
+          "default": "unknown"
+        },
+        "layering_allowance": {
+          "type": "string",
+          "enum": [
+            "none",
+            "light",
+            "standard",
+            "heavy",
+            "unknown"
+          ],
+          "default": "unknown"
+        },
+        "intended_fit_notes": {
+          "type": "string"
+        },
+        "data_source": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "source_retrieved_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "garment_measurements": {
+      "type": "array",
+      "description": "Finished garment measurements by labeled size, centimeters.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "string"
+          },
+          "chest_cm": {
+            "type": "number"
+          },
+          "bust_cm": {
+            "type": "number"
+          },
+          "waist_cm": {
+            "type": "number"
+          },
+          "hips_cm": {
+            "type": "number"
+          },
+          "shoulders_cm": {
+            "type": "number"
+          },
+          "sleeve_cm": {
+            "type": "number"
+          },
+          "inseam_cm": {
+            "type": "number"
+          },
+          "rise_cm": {
+            "type": "number"
+          },
+          "thigh_cm": {
+            "type": "number"
+          },
+          "garment_length_cm": {
+            "type": "number"
+          },
+          "foot_internal_length_cm": {
+            "type": "number"
+          },
+          "foot_internal_width_cm": {
+            "type": "number"
+          },
+          "calf_opening_cm": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "style_number": {
+      "type": "string"
+    },
+    "mpn": {
+      "type": "string"
+    },
+    "gtin": {
+      "type": "string"
+    },
+    "retailer_product_url": {
+      "type": "string"
+    },
+    "product_master_id": {
+      "type": "string",
+      "description": "Canonical ProductMaster ID once migrated/linked."
+    },
+    "canonical_variant_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Canonical ProductVariant IDs represented by this inventory item."
+    },
+    "retailer_offer_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "RetailerOffer IDs represented by this inventory item."
+    },
+    "catalog_migration_status": {
+      "type": "string",
+      "enum": [
+        "unlinked",
+        "linked",
+        "needs_review"
+      ],
+      "default": "unlinked"
+    },
+    "catalog_migrated_at": {
+      "type": "string",
+      "format": "date-time"
     }
   },
   "required": [

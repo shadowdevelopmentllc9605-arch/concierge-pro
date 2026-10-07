@@ -82,7 +82,7 @@ export default function Home() {
 
   return (
     <PullToRefresh onRefresh={loadData}>
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
+      <div className="min-h-screen bg-slate-50/85 dark:bg-slate-900/85">
         <div className="max-w-7xl mx-auto p-6">
           <div className="flex items-center gap-4 mb-8">
             {business?.logo_url && (

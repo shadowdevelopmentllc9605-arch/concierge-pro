@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { sharedBackendBridge } from '@/lib/sharedBackendBridge';
 import { Bell, Send, Gift, Tag, Megaphone, Sparkles, Trash2, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,7 +50,7 @@ export default function Notifications() {
         base44.entities.StoreCustomer.filter({ business_id: context.businessId })
       ]);
       setNotifications(
-        [...notifData].sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0)).slice(0, 50)
+        [...notifData].sort((a, b) => new Date(b.created_date || 0).getTime() - new Date(a.created_date || 0).getTime()).slice(0, 50)
       );
       setCustomers(customerData);
     } catch (err) {
@@ -94,15 +93,18 @@ export default function Notifications() {
     setSending(true);
     setDeliveryMessage(null);
     try {
-      const result = await sharedBackendBridge.sendCampaign({
-        title: form.title,
-        message: form.message,
-        type: form.type,
-        coupon_code: form.coupon_code || '',
-        discount_percent: form.discount_percent ? parseFloat(form.discount_percent) : undefined,
-        valid_until: form.valid_until || '',
-        target: form.target
+      const response = await base44.functions.invoke('sendCampaign', {
+        campaign: {
+          title: form.title,
+          message: form.message,
+          type: form.type,
+          coupon_code: form.coupon_code || '',
+          discount_percent: form.discount_percent ? parseFloat(form.discount_percent) : undefined,
+          valid_until: form.valid_until || '',
+          target: form.target
+        }
       });
+      const result = response?.data || response;
 
       if (!result?.success) {
         throw new Error(result?.error || 'The campaign could not be delivered.');
@@ -158,7 +160,7 @@ export default function Notifications() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-slate-50/85 p-6">
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <div>

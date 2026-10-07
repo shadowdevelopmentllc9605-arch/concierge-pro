@@ -45,6 +45,13 @@ export default function Inventory() {
     brand: '',
     style_type: 'casual',
     category: '',
+    footwear_type: 'all',
+    width_options: '',
+    footwear_last_name: '',
+    footwear_fit_profile: 'unknown',
+    footwear_size_adjustment_steps: '0',
+    footwear_sock_profile: 'not_applicable',
+    footwear_fit_notes: '',
     location_id: '',
     description: '',
     price: '',
@@ -59,6 +66,15 @@ export default function Inventory() {
     dimension_depth: '',
     dimension_unit: 'inches',
     tryOn_image: '',
+    size_chart_measurement_basis: 'body',
+    garment_fit_cut: 'unknown',
+    garment_stretch_level: 'unknown',
+    garment_fabric_behavior: 'unknown',
+    garment_layering_allowance: 'unknown',
+    garment_fit_notes: '',
+    garment_fit_source: '',
+    garment_fit_source_url: '',
+    garment_measurements_json: '[]',
     size_chart_json: '[]',
     variants_json: '[]'
   });
@@ -151,6 +167,13 @@ export default function Inventory() {
         brand: item.brand || '',
         style_type: item.style_type || 'casual',
         category: item.category || '',
+        footwear_type: item.footwear_type || 'all',
+        width_options: item.width_options?.join(', ') || '',
+        footwear_last_name: item.footwear_fit?.last_name || '',
+        footwear_fit_profile: item.footwear_fit?.fit_profile || 'unknown',
+        footwear_size_adjustment_steps: String(item.footwear_fit?.size_adjustment_steps || 0),
+        footwear_sock_profile: item.footwear_fit?.sock_profile || 'not_applicable',
+        footwear_fit_notes: item.footwear_fit?.fit_notes || '',
         location_id: item.location_id || '',
         description: item.description || '',
         price: item.price?.toString() || '',
@@ -165,6 +188,15 @@ export default function Inventory() {
         dimension_depth: item.dimensions?.depth?.toString() || '',
         dimension_unit: item.dimensions?.unit || 'inches',
         tryOn_image: item.tryOn_image || '',
+        size_chart_measurement_basis: item.size_chart_measurement_basis || 'body',
+        garment_fit_cut: item.garment_fit?.fit_cut || 'unknown',
+        garment_stretch_level: item.garment_fit?.stretch_level || 'unknown',
+        garment_fabric_behavior: item.garment_fit?.fabric_behavior || 'unknown',
+        garment_layering_allowance: item.garment_fit?.layering_allowance || 'unknown',
+        garment_fit_notes: item.garment_fit?.intended_fit_notes || '',
+        garment_fit_source: item.garment_fit?.data_source || '',
+        garment_fit_source_url: item.garment_fit?.source_url || '',
+        garment_measurements_json: JSON.stringify(item.garment_measurements || [], null, 2),
         size_chart_json: JSON.stringify(item.size_chart || [], null, 2),
         variants_json: JSON.stringify(item.variants || [], null, 2)
       });
@@ -176,6 +208,13 @@ export default function Inventory() {
         brand: '',
         style_type: 'casual',
         category: '',
+        footwear_type: 'all',
+        width_options: '',
+        footwear_last_name: '',
+        footwear_fit_profile: 'unknown',
+        footwear_size_adjustment_steps: '0',
+        footwear_sock_profile: 'not_applicable',
+        footwear_fit_notes: '',
         location_id: '',
         description: '',
         price: '',
@@ -190,6 +229,15 @@ export default function Inventory() {
         dimension_depth: '',
         dimension_unit: 'inches',
         tryOn_image: '',
+        size_chart_measurement_basis: 'body',
+        garment_fit_cut: 'unknown',
+        garment_stretch_level: 'unknown',
+        garment_fabric_behavior: 'unknown',
+        garment_layering_allowance: 'unknown',
+        garment_fit_notes: '',
+        garment_fit_source: '',
+        garment_fit_source_url: '',
+        garment_measurements_json: '[]',
         size_chart_json: '[]',
         variants_json: '[]'
       });
@@ -201,13 +249,15 @@ export default function Inventory() {
     if (!businessId) return;
 
     let sizeChart = [];
+    let garmentMeasurements = [];
     let variants = [];
     try {
       sizeChart = JSON.parse(form.size_chart_json || '[]');
+      garmentMeasurements = JSON.parse(form.garment_measurements_json || '[]');
       variants = JSON.parse(form.variants_json || '[]');
-      if (!Array.isArray(sizeChart) || !Array.isArray(variants)) throw new Error('arrays required');
+      if (!Array.isArray(sizeChart) || !Array.isArray(garmentMeasurements) || !Array.isArray(variants)) throw new Error('arrays required');
     } catch {
-      alert('Size chart and variant stock must be valid JSON arrays.');
+      alert('Size chart, garment measurements, and variant stock must be valid JSON arrays.');
       return;
     }
 
@@ -222,6 +272,15 @@ export default function Inventory() {
       brand: form.brand,
       style_type: form.style_type,
       category: form.category,
+      footwear_type: form.footwear_type || 'all',
+      width_options: form.width_options.split(',').map(s => s.trim()).filter(Boolean),
+      footwear_fit: {
+        last_name: form.footwear_last_name || '',
+        fit_profile: form.footwear_fit_profile || 'unknown',
+        size_adjustment_steps: Number(form.footwear_size_adjustment_steps || 0),
+        sock_profile: form.footwear_sock_profile || 'not_applicable',
+        fit_notes: form.footwear_fit_notes || ''
+      },
       location_id: form.location_id,
       description: form.description,
       price: parseFloat(form.price) || 0,
@@ -232,7 +291,19 @@ export default function Inventory() {
       sizes: form.sizes.split(',').map(s => s.trim()).filter(Boolean),
       colors: form.colors.split(',').map(s => s.trim()).filter(Boolean),
       tryOn_image: form.tryOn_image || '',
+      size_chart_measurement_basis: form.size_chart_measurement_basis || 'body',
       size_chart: sizeChart,
+      garment_fit: {
+        fit_cut: form.garment_fit_cut || 'unknown',
+        stretch_level: form.garment_stretch_level || 'unknown',
+        fabric_behavior: form.garment_fabric_behavior || 'unknown',
+        layering_allowance: form.garment_layering_allowance || 'unknown',
+        intended_fit_notes: form.garment_fit_notes || '',
+        data_source: form.garment_fit_source || '',
+        source_url: form.garment_fit_source_url || '',
+        source_retrieved_at: form.garment_fit_source_url ? new Date().toISOString() : ''
+      },
+      garment_measurements: garmentMeasurements,
       variants,
       dimensions: {
         width: parseFloat(form.dimension_width) || 0,
@@ -288,7 +359,10 @@ export default function Inventory() {
   const availableBrandCharts = brandCharts.filter(chart => {
     if (normalizeBrandKey(chart.brand_key || chart.brand_name) !== normalizeBrandKey(form.brand)) return false;
     if (!inferredCategoryGroup) return true;
-    if (chart.category_group === inferredCategoryGroup) return true;
+    if (chart.category_group === inferredCategoryGroup) {
+      if (inferredCategoryGroup !== 'footwear' || !form.footwear_type || form.footwear_type === 'all') return true;
+      return !chart.footwear_type || chart.footwear_type === 'all' || chart.footwear_type === form.footwear_type;
+    }
     return inferredCategoryGroup === 'outerwear' && chart.category_group === 'tops';
   });
   const selectedBrandChart = brandCharts.find(chart => chart.id === selectedBrandChartId) || null;
@@ -297,8 +371,16 @@ export default function Inventory() {
     setSelectedBrandChartId(chartId);
     const chart = brandCharts.find(item => item.id === chartId);
     if (!chart) return;
+    const widths = Array.from(new Set((chart.entries || []).map(row => row.width_code).filter(Boolean)));
     setForm(prev => ({
       ...prev,
+      footwear_type: chart.footwear_type && chart.footwear_type !== 'all' ? chart.footwear_type : prev.footwear_type,
+      width_options: widths.length ? widths.join(', ') : prev.width_options,
+      footwear_last_name: chart.last_name || prev.footwear_last_name,
+      footwear_size_adjustment_steps: String(chart.size_adjustment_steps || 0),
+      footwear_sock_profile: chart.sock_profile || prev.footwear_sock_profile,
+      footwear_fit_notes: chart.fit_guidance || prev.footwear_fit_notes,
+      size_chart_measurement_basis: chart.measurement_basis || 'body',
       size_chart_json: JSON.stringify(chart.entries || [], null, 2)
     }));
   };
@@ -527,9 +609,121 @@ export default function Inventory() {
                   setSelectedBrandChartId('');
                   setForm({ ...form, category: e.target.value });
                 }}
-                placeholder="e.g. Shirts, Pants, Accessories"
+                placeholder="e.g. Shirts, Pants, Shoes, Boots"
               />
             </div>
+
+            {inferredCategoryGroup === 'footwear' && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+                <div>
+                  <Label>Footwear Type</Label>
+                  <select
+                    value={form.footwear_type}
+                    onChange={(e) => {
+                      setSelectedBrandChartId('');
+                      setForm({ ...form, footwear_type: e.target.value });
+                    }}
+                    className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="all">General / not specified</option>
+                    <option value="athletic_running">Athletic — Running</option>
+                    <option value="athletic_training">Athletic — Training</option>
+                    <option value="walking">Walking</option>
+                    <option value="casual_sneaker">Casual Sneaker</option>
+                    <option value="dress_oxford_derby">Dress — Oxford / Derby</option>
+                    <option value="loafer_slipon">Loafer / Slip-on</option>
+                    <option value="boot_work">Boot — Work</option>
+                    <option value="boot_hiking">Boot — Hiking / Outdoor</option>
+                    <option value="boot_fashion">Boot — Fashion / Dress</option>
+                    <option value="sandal">Sandal</option>
+                    <option value="heel_pump">Heel / Pump</option>
+                    <option value="other">Other Footwear</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Available Widths</Label>
+                    <Input
+                      className="mt-2"
+                      value={form.width_options}
+                      onChange={(e) => setForm({ ...form, width_options: e.target.value })}
+                      placeholder="D, E, 2E or M, W"
+                    />
+                  </div>
+                  <div>
+                    <Label>Last / Fit Family</Label>
+                    <Input
+                      className="mt-2"
+                      value={form.footwear_last_name}
+                      onChange={(e) => setForm({ ...form, footwear_last_name: e.target.value })}
+                      placeholder="e.g. 65 Last"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Fit Profile</Label>
+                    <select
+                      value={form.footwear_fit_profile}
+                      onChange={(e) => setForm({ ...form, footwear_fit_profile: e.target.value })}
+                      className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    >
+                      <option value="unknown">Not specified</option>
+                      <option value="true_to_size">True to size</option>
+                      <option value="snug">Snug</option>
+                      <option value="roomy">Roomy</option>
+                      <option value="runs_small">Runs small</option>
+                      <option value="runs_large">Runs large</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Official Size Adjustment</Label>
+                    <select
+                      value={form.footwear_size_adjustment_steps}
+                      onChange={(e) => setForm({ ...form, footwear_size_adjustment_steps: e.target.value })}
+                      className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    >
+                      <option value="0">No automatic adjustment</option>
+                      <option value="-2">Down 1 full size</option>
+                      <option value="-1">Down ½ size</option>
+                      <option value="1">Up ½ size</option>
+                      <option value="2">Up 1 full size</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Sock Profile</Label>
+                  <select
+                    value={form.footwear_sock_profile}
+                    onChange={(e) => setForm({ ...form, footwear_sock_profile: e.target.value })}
+                    className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="not_applicable">Not specified</option>
+                    <option value="thin">Thin / dress sock</option>
+                    <option value="standard">Standard sock</option>
+                    <option value="thick">Thick / boot sock</option>
+                    <option value="varies">Varies by use</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label>Official / Product Fit Notes</Label>
+                  <Textarea
+                    className="mt-2"
+                    value={form.footwear_fit_notes}
+                    onChange={(e) => setForm({ ...form, footwear_fit_notes: e.target.value })}
+                    placeholder="Use only published brand/product guidance; do not guess a size adjustment."
+                    rows={3}
+                  />
+                </div>
+                <p className="text-xs text-slate-500">
+                  Width-specific variants can use a width_code field in Variant Stock JSON, for example D, E, 2E, B, Wide, or Narrow.
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label>Description</Label>
@@ -692,6 +886,85 @@ export default function Inventory() {
               <p className="text-xs text-slate-500">
                 Selecting a verified chart copies its centimeter measurements into this product. You can still edit the product chart below when a specific garment differs from the brand standard.
               </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+              <div>
+                <h3 className="font-semibold text-slate-900">Fit & Construction Data</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  This data lets The Concierge distinguish garments that share a labeled size but fit differently.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Size Chart Basis</Label>
+                  <select
+                    value={form.size_chart_measurement_basis}
+                    onChange={(e) => setForm({ ...form, size_chart_measurement_basis: e.target.value })}
+                    className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="body">Body measurements</option>
+                    <option value="garment">Finished garment measurements</option>
+                    <option value="mixed">Mixed</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Cut / Silhouette</Label>
+                  <select
+                    value={form.garment_fit_cut}
+                    onChange={(e) => setForm({ ...form, garment_fit_cut: e.target.value })}
+                    className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="unknown">Unknown</option>
+                    <option value="compression">Compression</option>
+                    <option value="skinny">Skinny</option>
+                    <option value="slim">Slim</option>
+                    <option value="tailored">Tailored</option>
+                    <option value="regular">Regular</option>
+                    <option value="relaxed">Relaxed</option>
+                    <option value="oversized">Oversized</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>Stretch</Label>
+                  <select value={form.garment_stretch_level} onChange={(e) => setForm({ ...form, garment_stretch_level: e.target.value })} className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
+                    <option value="unknown">Unknown</option><option value="none">None</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Fabric Behavior</Label>
+                  <select value={form.garment_fabric_behavior} onChange={(e) => setForm({ ...form, garment_fabric_behavior: e.target.value })} className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
+                    <option value="unknown">Unknown</option><option value="rigid">Rigid</option><option value="structured">Structured</option><option value="draped">Draped</option><option value="stretchy">Stretchy</option><option value="mixed">Mixed</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Layering</Label>
+                  <select value={form.garment_layering_allowance} onChange={(e) => setForm({ ...form, garment_layering_allowance: e.target.value })} className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
+                    <option value="unknown">Unknown</option><option value="none">None</option><option value="light">Light</option><option value="standard">Standard</option><option value="heavy">Heavy</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <Label>Published Fit Notes</Label>
+                <Textarea value={form.garment_fit_notes} onChange={(e) => setForm({ ...form, garment_fit_notes: e.target.value })} rows={2} className="mt-2" placeholder="e.g. tailored through chest; size up for layering" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input value={form.garment_fit_source} onChange={(e) => setForm({ ...form, garment_fit_source: e.target.value })} placeholder="Data source / manufacturer" />
+                <Input value={form.garment_fit_source_url} onChange={(e) => setForm({ ...form, garment_fit_source_url: e.target.value })} placeholder="Official source URL" />
+              </div>
+              <div>
+                <Label>Finished Garment Measurements (JSON, cm)</Label>
+                <Textarea
+                  value={form.garment_measurements_json}
+                  onChange={(e) => setForm({ ...form, garment_measurements_json: e.target.value })}
+                  rows={6}
+                  className="mt-2 font-mono text-xs"
+                  placeholder={'[{"size":"M","chest_cm":108,"waist_cm":102,"shoulders_cm":46,"sleeve_cm":64}]'}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

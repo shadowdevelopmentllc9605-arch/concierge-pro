@@ -30,6 +30,9 @@
           },
           "color": {
             "type": "string"
+          },
+          "width_code": {
+            "type": "string"
           }
         }
       }
@@ -92,6 +95,45 @@
     "shipping": {
       "type": "number",
       "default": 0
+    },
+    "concierge_attributed": {
+      "type": "boolean",
+      "default": false
+    },
+    "attribution_source": {
+      "type": "string",
+      "enum": [
+        "concierge_online",
+        "concierge_store_visit",
+        "none"
+      ],
+      "default": "none"
+    },
+    "attribution_event_id": {
+      "type": "string"
+    },
+    "platform_fee_percent": {
+      "type": "number",
+      "default": 4
+    },
+    "platform_fee_amount": {
+      "type": "number",
+      "default": 0
+    },
+    "platform_fee_invoice_item_id": {
+      "type": "string"
+    },
+    "platform_fee_status": {
+      "type": "string",
+      "enum": [
+        "collected",
+        "accrued",
+        "waived",
+        "partially_refunded",
+        "refunded",
+        "not_applicable"
+      ],
+      "default": "not_applicable"
     }
   },
   "required": [
@@ -105,18 +147,9 @@
           "data.business_id": "{{user.data.business_id}}"
         },
         {
-          "$or": [
-            {
-              "user_condition": {
-                "data.vendor_role": "manager"
-              }
-            },
-            {
-              "user_condition": {
-                "data.vendor_permissions.process_checkout": true
-              }
-            }
-          ]
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
         }
       ]
     },
@@ -129,21 +162,23 @@
           "data.business_id": "{{user.data.business_id}}"
         },
         {
-          "$or": [
-            {
-              "user_condition": {
-                "data.vendor_role": "manager"
-              }
-            },
-            {
-              "user_condition": {
-                "data.vendor_permissions.process_checkout": true
-              }
-            }
-          ]
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
         }
       ]
     },
-    "delete": false
+    "delete": {
+      "$and": [
+        {
+          "data.business_id": "{{user.data.business_id}}"
+        },
+        {
+          "user_condition": {
+            "data.vendor_role": "manager"
+          }
+        }
+      ]
+    }
   }
 }

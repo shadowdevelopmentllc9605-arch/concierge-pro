@@ -3,7 +3,7 @@ import { createClientFromRequest } from "npm:@base44/sdk";
 export default async function (req: Request): Promise<Response> {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    const user = await base44.auth.me().catch(() => null);
     if (!user?.business_id || user?.vendor_role !== "manager") {
       return Response.json({ error: "Manager access required" }, { status: 403 });
     }
