@@ -8,4 +8,4 @@ const FAQS=[
  ['Why are card payments disabled?','A production payment provider must be configured server-side before card or mobile payments are enabled. Cash transactions can be recorded now.'],
  ['How do customer campaigns work?','Campaigns deliver to linked Concierge customers as in-app notifications and attempt email delivery. Failed delivery remains visible for follow-up.']
 ];
-export default function FAQ(){return <div className="min-h-screen bg-slate-50 p-6"><div className="max-w-4xl mx-auto"><h1 className="text-3xl font-bold mb-6">FAQ</h1><div className="space-y-3">{FAQS.map(([q,a])=><Card key={q}><CardContent className="p-5"><h2 className="font-semibold">{q}</h2><p className="text-slate-600 mt-2">{a}</p></CardContent></Card>)}</div></div></div>}
+export default function FAQ(){return <div className="min-h-screen bg-slate-50/85 p-6"><div className="max-w-4xl mx-auto"><h1 className="text-3xl font-bold mb-6">FAQ</h1><div className="space-y-3">{FAQS.map(([q,a])=><Card key={q}><CardContent className="p-5"><h2 className="font-semibold">{q}</h2><p className="text-slate-600 mt-2">{a}</p></CardContent></Card>)}</div></div></div>}

@@ -13,17 +13,14 @@ const MANAGER_PERMISSIONS = {
 export default async function (req: Request): Promise<Response> {
   try {
     const base44 = createClientFromRequest(req);
-    const user = await base44.auth.me();
+    const user = await base44.auth.me().catch(() => null);
     if (!user) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
+    // Ownership is derived ONLY from server-set identity (owner_user_id).
+    // Client-settable email strings (owner_email) are never trusted for binding.
     const owned = await base44.asServiceRole.entities.Business.filter({ owner_user_id: user.id });
     let business = owned[0] || null;
     let employee = null;
-
-    if (!business && user.email) {
-      const ownedByEmail = await base44.asServiceRole.entities.Business.filter({ owner_email: user.email });
-      business = ownedByEmail[0] || null;
-    }
 
     if (business) {
       const employees = await base44.asServiceRole.entities.Employee.filter({ email: user.email });
@@ -45,13 +42,12 @@ export default async function (req: Request): Promise<Response> {
         employee = await base44.asServiceRole.entities.Employee.create(managerData);
       }
     } else {
+      // Employee membership is matched ONLY by server identity (user_id), never
+      // by email — an email match would let a pre-created record hijack this user.
       const byUser = await base44.asServiceRole.entities.Employee.filter({ user_id: user.id });
-      employee = byUser.find((e: any) => e.status !== "inactive") || byUser[0] || null;
-
-      if (!employee && user.email) {
-        const byEmail = await base44.asServiceRole.entities.Employee.filter({ email: user.email });
-        employee = byEmail.find((e: any) => e.status !== "inactive") || byEmail[0] || null;
-      }
+      // Only an ACTIVE employee record grants membership. Never fall back to an
+      // inactive record — deactivation is revocation, including for managers.
+      employee = byUser.find((e: any) => e.status !== "inactive") || null;
 
       if (!employee || !employee.business_id) {
         return Response.json({ error: "No active vendor membership" }, { status: 403 });

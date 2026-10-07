@@ -37,7 +37,7 @@ export default function Customers() {
 
       const data = await base44.entities.StoreCustomer.filter(query);
       setCustomers(
-        [...data].sort((a, b) => new Date(b.last_visit || 0) - new Date(a.last_visit || 0)).slice(0, 100)
+        [...data].sort((a, b) => new Date(b.last_visit || 0).getTime() - new Date(a.last_visit || 0).getTime()).slice(0, 100)
       );
     } catch (err) {
       console.error(err);
@@ -68,7 +68,7 @@ export default function Customers() {
 
   return (
     <PullToRefresh onRefresh={loadCustomers}>
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800 p-6">
+    <div className="min-h-screen bg-slate-50/85 dark:bg-slate-900/85 p-6">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>

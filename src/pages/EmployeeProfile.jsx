@@ -9,7 +9,7 @@ export default function EmployeeProfile() {
   useEffect(() => { getVendorContext().then(setContext).catch(console.error); }, []);
   const employee = context?.employee;
   if (!context) return <div className="p-8">Loading…</div>;
-  return <div className="min-h-screen bg-slate-50 p-6"><div className="max-w-2xl mx-auto">
+  return <div className="min-h-screen bg-slate-50/85 p-6"><div className="max-w-2xl mx-auto">
     <h1 className="text-3xl font-bold mb-6">My Profile</h1>
     <Card><CardContent className="p-6">
       <div className="flex items-center gap-4 mb-6">

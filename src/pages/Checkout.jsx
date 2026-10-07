@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { sharedBackendBridge } from '@/lib/sharedBackendBridge';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Search, Plus, Minus, User, CreditCard, Banknote, Smartphone, Receipt, Loader2, Package, X, Check, AlertTriangle } from 'lucide-react';
@@ -102,6 +101,7 @@ export default function Checkout() {
         ...item,
         quantity: 1,
         selectedSize: item.sizes?.length === 1 ? item.sizes[0] : '',
+        selectedWidth: item.width_options?.length === 1 ? item.width_options[0] : '',
         selectedColor: item.colors?.length === 1 ? item.colors[0] : ''
       }]);
     }
@@ -143,10 +143,11 @@ export default function Checkout() {
 
     const missingOptions = cart.find(item =>
       (item.sizes?.length > 0 && !item.selectedSize) ||
+      (item.width_options?.length > 0 && !item.selectedWidth) ||
       (item.colors?.length > 0 && !item.selectedColor)
     );
     if (missingOptions) {
-      setPaymentError(`Choose the size and color for ${missingOptions.name} before checkout.`);
+      setPaymentError(`Choose the size, width, and color for ${missingOptions.name} before checkout.`);
       return;
     }
 
@@ -159,7 +160,7 @@ export default function Checkout() {
         business.default_location_id ||
         '';
 
-      const result = await sharedBackendBridge.recordSale({
+      const response = await base44.functions.invoke('recordSale', {
         customerId: selectedCustomer.id,
         locationId,
         paymentMethod,
@@ -169,9 +170,11 @@ export default function Checkout() {
           inventoryItemId: item.id,
           quantity: item.quantity,
           size: item.selectedSize || '',
+          width_code: item.selectedWidth || '',
           color: item.selectedColor || ''
         }))
       });
+      const result = response?.data || response;
 
       if (!result?.success) {
         throw new Error(result?.error || 'The sale could not be recorded.');
@@ -204,7 +207,7 @@ export default function Checkout() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
+    <div className="min-h-screen bg-slate-900/85">
       <div className="grid grid-cols-1 lg:grid-cols-3 h-screen">
         {/* Products */}
         <div className="lg:col-span-2 p-6 overflow-auto">
@@ -301,8 +304,8 @@ export default function Checkout() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium truncate">{item.name}</p>
                     <p className="text-sm text-slate-500">${item.price?.toFixed(2)}</p>
-                    {(item.sizes?.length > 0 || item.colors?.length > 0) && (
-                      <div className="grid grid-cols-2 gap-1 mt-2">
+                    {(item.sizes?.length > 0 || item.width_options?.length > 0 || item.colors?.length > 0) && (
+                      <div className="grid grid-cols-3 gap-1 mt-2">
                         {item.sizes?.length > 0 && (
                           <Select
                             value={item.selectedSize || ''}
@@ -313,6 +316,19 @@ export default function Checkout() {
                             <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Size" /></SelectTrigger>
                             <SelectContent>
                               {item.sizes.map(size => <SelectItem key={size} value={size}>{size}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        )}
+                        {item.width_options?.length > 0 && (
+                          <Select
+                            value={item.selectedWidth || ''}
+                            onValueChange={(value) => setCart(prev => prev.map(row =>
+                              row.id === item.id ? { ...row, selectedWidth: value } : row
+                            ))}
+                          >
+                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Width" /></SelectTrigger>
+                            <SelectContent>
+                              {item.width_options.map(width => <SelectItem key={width} value={width}>{width}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         )}

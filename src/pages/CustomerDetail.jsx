@@ -145,7 +145,7 @@ export default function CustomerDetail() {
   const assignedEmployee = employees.find(e => e.id === customer.assigned_employee_id);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
+    <div className="min-h-screen bg-slate-50/85 p-6">
       <div className="max-w-5xl mx-auto">
         <Button variant="ghost" onClick={() => navigate(createPageUrl('Customers'))} className="mb-6">
           <ArrowLeft className="w-4 h-4 mr-2" /> Back to Customers

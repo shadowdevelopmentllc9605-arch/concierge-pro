@@ -29,7 +29,7 @@ export default function Support(){
     }
   };
 
-  return <div className="min-h-screen bg-slate-50 p-6"><div className="max-w-2xl mx-auto">
+  return <div className="min-h-screen bg-slate-50/85 p-6"><div className="max-w-2xl mx-auto">
     <h1 className="text-3xl font-bold mb-2">Support</h1>
     <p className="text-slate-500 mb-6">Help for store setup, employees, inventory, checkout, and customer workflows.</p>
     <div className="space-y-3">

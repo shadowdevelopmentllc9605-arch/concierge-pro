@@ -24,11 +24,11 @@ const badgeVariants = cva(
 )
 
 function Badge({
-  className,
-  variant,
+  className = "",
+  variant = "default",
   ...props
 }) {
-  return (<div className={cn(badgeVariants({ variant }), className)} {...props} />);
+  return (<div className={cn(badgeVariants({ variant: /** @type {'default'|'destructive'|'outline'|'secondary'} */ (variant) }), className)} {...props} />);
 }
 
 export { Badge, badgeVariants }

@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
-import { sharedBackendBridge } from '@/lib/sharedBackendBridge';
 import { 
   LayoutDashboard, Users, Package, MapPin, ShoppingCart, 
   Bell, BarChart3, DoorOpen, FileText, Settings, Menu,
@@ -14,6 +13,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeProvider } from '@/components/ui/ThemeProvider';
 import { canAccessVendorPage, getVendorContext } from '@/lib/vendorContext';
 import { toast } from '@/components/ui/use-toast';
+
+const BOUTIQUE_BG = 'https://media.base44.com/images/public/69a25fa908ebd18cd4723d7c/b61041a41_generated_image.png';
 
 const pageVariants = {
   initial: { opacity: 0, x: 24 },
@@ -50,7 +51,7 @@ export default function Layout({ children, currentPageName }) {
       setBusinessId(context.businessId);
 
       if (context.businessId) {
-        sharedBackendBridge.retryPending().catch(() => {});
+        base44.functions.invoke('retryIntegrationSyncs', {}).catch(() => {});
       }
     } catch (err) {
       console.error(err);
@@ -188,8 +189,17 @@ export default function Layout({ children, currentPageName }) {
   return (
     <ThemeProvider>
     <div className="flex min-h-screen bg-slate-100 dark:bg-slate-900" style={{ overscrollBehavior: 'none' }}>
+      {/* Boutique backdrop visible behind translucent page backgrounds */}
+      <div
+        className="fixed inset-0 z-0 pointer-events-none"
+        style={{
+          backgroundImage: `url('${BOUTIQUE_BG}')`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+        }}
+      />
       {/* Desktop Sidebar */}
-      <aside className="hidden lg:flex w-72 bg-white shadow-lg flex-col">
+      <aside className="relative hidden lg:flex w-72 bg-white shadow-lg flex-col">
         <NavContent />
       </aside>
 
@@ -219,14 +229,14 @@ export default function Layout({ children, currentPageName }) {
       {/* Main Content with page transition + scroll position restore */}
       <main
         id="main-scroll"
-        className="flex-1 overflow-auto lg:pt-0"
+        className="relative flex-1 overflow-auto lg:pt-0"
         style={{
           paddingTop: 'calc(3.5rem + env(safe-area-inset-top))',
           paddingBottom: 'calc(4rem + env(safe-area-inset-bottom))',
           overscrollBehavior: 'none',
         }}
         onScroll={(e) => {
-          sessionStorage.setItem(`scroll_${currentPageName}`, e.currentTarget.scrollTop);
+          sessionStorage.setItem(`scroll_${currentPageName}`, String(e.currentTarget.scrollTop));
         }}
         ref={(el) => {
           if (el) {
