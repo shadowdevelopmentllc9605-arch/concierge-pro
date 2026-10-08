@@ -1,3 +1,4 @@
+import { authClient } from '@/api/authClient';
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
@@ -44,7 +45,7 @@ export default function BusinessSetup() {
 
   const loadBusiness = async () => {
     try {
-      const userData = await base44.auth.me();
+      const userData = await authClient.me();
       let businesses = await base44.entities.Business.filter({ owner_user_id: userData.id });
 
       if (businesses.length === 0 && userData.email) {
@@ -93,7 +94,7 @@ export default function BusinessSetup() {
   const saveProgress = async () => {
     setSaving(true);
     try {
-      const userData = await base44.auth.me();
+      const userData = await authClient.me();
       const data = /** @type {any} */ ({
         ...form,
         tax_rate: Math.max(0, parseFloat(form.tax_rate) || 0),
@@ -192,7 +193,7 @@ export default function BusinessSetup() {
       const response = await base44.functions.invoke('deleteVendorBusiness', {});
       const result = response?.data || response;
       if (!result?.success) throw new Error(result?.error || 'Business data could not be deleted.');
-      base44.auth.logout();
+      authClient.logout();
     } catch (err) {
       console.error(err);
       alert(err?.response?.data?.error || err?.message || 'Business data could not be deleted.');
