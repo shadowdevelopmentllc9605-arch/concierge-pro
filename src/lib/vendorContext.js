@@ -10,48 +10,34 @@ export const MANAGER_PERMISSIONS = {
   send_notifications: true,
 };
 
-async function refreshTrustedMembership(user) {
-  if (user?.business_id && user?.vendor_role) return user;
-
-  const response = await base44.functions.invoke('claimVendorMembership', {});
-  const result = response?.data || response;
-  if (!result?.businessId) return user;
-
-  return base44.auth.me();
-}
-
 export async function getVendorContext() {
-  let user = await base44.auth.me();
+  const user = await base44.auth.me();
+  let employee = null;
+  let business = null;
+  let vendorRole = null;
+  let permissions = {};
 
-  try {
-    user = await refreshTrustedMembership(user);
-  } catch (error) {
-    // First-time owners can still reach BusinessSetup before a membership exists.
-    if (window?.location?.pathname !== '/BusinessSetup') {
-      console.warn('Vendor membership is not active yet', error);
+  const ownedBusinesses = await base44.entities.Business.filter({ owner_user_id: user.id });
+  if (ownedBusinesses.length > 0) {
+    business = ownedBusinesses[0];
+    vendorRole = 'manager';
+    permissions = MANAGER_PERMISSIONS;
+  } else {
+    const employees = await base44.entities.Employee.filter({ user_id: user.id });
+    employee = employees.find(record => record.status !== 'inactive') || employees[0] || null;
+    if (employee) {
+      const businesses = await base44.entities.Business.filter({ id: employee.business_id });
+      business = businesses[0] || null;
+      vendorRole = employee.role || 'sales_associate';
+      permissions = vendorRole === 'manager' ? MANAGER_PERMISSIONS : (employee.permissions || {});
     }
   }
 
-  const businessId = user?.business_id || null;
-  const vendorRole = user?.vendor_role || null;
-  const permissions =
-    vendorRole === 'manager'
-      ? MANAGER_PERMISSIONS
-      : (user?.vendor_permissions || {});
+  const businessId = business?.id || employee?.business_id || null;
 
-  let employee = null;
-  let business = null;
-
-  if (businessId) {
-    const [employees, businesses] = await Promise.all([
-      base44.entities.Employee.filter({ user_id: user.id, business_id: businessId }),
-      base44.entities.Business.filter({ id: businessId }),
-    ]);
-    employee =
-      employees.find(record => record.status !== 'inactive') ||
-      employees[0] ||
-      null;
-    business = businesses[0] || null;
+  if (businessId && !employee) {
+    const employees = await base44.entities.Employee.filter({ user_id: user.id, business_id: businessId });
+    employee = employees.find(record => record.status !== 'inactive') || employees[0] || null;
   }
 
   return {
@@ -66,14 +52,8 @@ export async function getVendorContext() {
 }
 
 export function canAccessVendorPage(pageName, contextOrEmployee) {
-  const vendorRole =
-    contextOrEmployee?.vendorRole ||
-    contextOrEmployee?.role ||
-    null;
-  const permissions =
-    contextOrEmployee?.permissions ||
-    contextOrEmployee?.vendor_permissions ||
-    {};
+  const vendorRole = contextOrEmployee?.vendorRole || contextOrEmployee?.role || null;
+  const permissions = contextOrEmployee?.permissions || contextOrEmployee?.vendor_permissions || {};
 
   if (!vendorRole) return pageName === 'BusinessSetup';
   if (vendorRole === 'manager') return true;
