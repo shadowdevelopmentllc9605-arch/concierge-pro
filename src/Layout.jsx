@@ -1,3 +1,4 @@
+import { authClient } from '@/api/authClient';
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
@@ -75,7 +76,7 @@ export default function Layout({ children, currentPageName }) {
   }, [businessId]);
 
   const handleLogout = () => {
-    base44.auth.logout();
+    authClient.logout();
   };
 
   if (loadingUser) {
