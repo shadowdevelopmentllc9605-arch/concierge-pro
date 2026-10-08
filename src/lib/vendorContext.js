@@ -1,3 +1,4 @@
+import { authClient } from '@/api/authClient';
 import { base44 } from '@/api/base44Client';
 
 export const MANAGER_PERMISSIONS = {
@@ -17,11 +18,11 @@ async function refreshTrustedMembership(user) {
   const result = response?.data || response;
   if (!result?.businessId) return user;
 
-  return base44.auth.me();
+  return authClient.me();
 }
 
 export async function getVendorContext() {
-  let user = await base44.auth.me();
+  let user = await authClient.me();
 
   try {
     user = await refreshTrustedMembership(user);
