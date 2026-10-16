@@ -1,4 +1,5 @@
 import { supabase } from '@/api/supabaseClient';
+import { normalizePurchaseItem } from '@/lib/purchaseItems';
 
 const directTables = {
   CartItem: 'cart_items',
@@ -59,7 +60,13 @@ const fromDb = (entity, row) => {
     out.price = row.unit_price;
     out.product_price = Number(row.unit_price ?? 0);
   }
-  if (entity === 'Purchase') out.user_id = row.shopper_user_id;
+  if (entity === 'Purchase') {
+    out.user_id = row.shopper_user_id;
+    if (Array.isArray(row.purchase_items)) {
+      out.items = row.purchase_items.map(normalizePurchaseItem);
+      delete out.purchase_items;
+    }
+  }
   if (entity === 'StoreCheckin') {
     out.user_id = row.shopper_user_id;
     out.vendor_id = row.legacy_vendor_id;
@@ -235,7 +242,7 @@ const entityApi = (entity) => ({
     if (entity === 'Product') return loadProducts(filters, sort, limit || 100);
     const table = directTables[entity];
     if (!table) return [];
-    let query = applyFilters(supabase.from(table).select('*'), entity, filters);
+    let query = applyFilters(supabase.from(table).select(entity === 'Purchase' ? '*,purchase_items(*)' : '*'), entity, filters);
     if (sort) {
       const desc = sort.startsWith('-');
       const key = sort.replace(/^-/, '');
@@ -258,7 +265,7 @@ const entityApi = (entity) => ({
     }
     const table = directTables[entity];
     if (!table) return sortOrOptions && typeof sortOrOptions === 'object' ? { items: [], next_cursor: null } : [];
-    let query = supabase.from(table).select('*');
+    let query = supabase.from(table).select(entity === 'Purchase' ? '*,purchase_items(*)' : '*');
     if (typeof sortOrOptions === 'string') {
       const desc = sortOrOptions.startsWith('-');
       const key = sortOrOptions.replace(/^-/, '');
