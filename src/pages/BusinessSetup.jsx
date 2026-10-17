@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { buildBusinessSetupPayload } from '@/lib/businessSetupPayload';
 
 export default function BusinessSetup() {
   const navigate = useNavigate();
@@ -85,25 +86,16 @@ export default function BusinessSetup() {
     setSetupError('');
     try {
       const userData = await base44.auth.me();
-      // Persist only columns that exist in public.businesses. The browser
-      // must not copy protected Stripe or ownership fields back on updates.
-      const data = {
-        name: String(form.name || '').trim(),
-        logo_url: form.logo_url || null,
-        floor_plan_url: form.floor_plan_url || null,
-        address: form.address || null,
-        phone: form.phone || null,
-        email: form.email || userData.email || null,
-        tax_rate: Math.max(0, Number(form.tax_rate) || 0),
-        open_procedures: form.open_procedures || null,
-        close_procedures: form.close_procedures || null,
-        linked_customer_app_legacy_id: form.linked_customer_app_id || null,
-        setup_complete: step >= 3,
-      };
-      if (!data.name) throw new Error('Enter a business name before continuing.');
-      const savedBusiness = business
-        ? await base44.entities.Business.update(business.id, data)
-        : await base44.entities.Business.create({ ...data, owner_user_id: userData.id });
+      const creating = !business;
+      const data = buildBusinessSetupPayload(form, {
+        userId: userData.id,
+        email: userData.email,
+        step,
+        creating,
+      });
+      const savedBusiness = creating
+        ? await base44.entities.Business.create(data)
+        : await base44.entities.Business.update(business.id, data);
       setBusiness(savedBusiness);
       // This server action resolves the authenticated owner; it does not
       // trust a role or permission supplied by the form.
