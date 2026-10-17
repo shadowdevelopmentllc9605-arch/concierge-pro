@@ -18,6 +18,7 @@ export default function BusinessSetup() {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [stripeBusy, setStripeBusy] = useState('');
   const [stripeError, setStripeError] = useState('');
+  const [setupError, setSetupError] = useState('');
   const [form, setForm] = useState({
     name: '',
     logo_url: '',
@@ -47,33 +48,20 @@ export default function BusinessSetup() {
       const userData = await base44.auth.me();
       let businesses = await base44.entities.Business.filter({ owner_user_id: userData.id });
 
-      if (businesses.length === 0 && userData.email) {
-        businesses = await base44.entities.Business.filter({ owner_email: userData.email });
-      }
-
-      if (businesses.length === 0) {
-        const legacyBusinesses = await base44.entities.Business.list();
-        if (
-          legacyBusinesses.length === 1 &&
-          !legacyBusinesses[0].owner_user_id &&
-          !legacyBusinesses[0].owner_email
-        ) {
-          businesses = legacyBusinesses;
-        }
-      }
-
       if (businesses.length > 0) {
         const existing = businesses[0];
         setBusiness(existing);
         setForm(prev => ({
           ...prev,
           ...existing,
+          linked_customer_app_id: existing.linked_customer_app_legacy_id || '',
           tax_rate: existing.tax_rate?.toString() || '0',
         }));
         if (existing.setup_complete) setStep(4);
       }
     } catch (err) {
       console.error(err);
+      setSetupError(err?.message || 'Your retailer information could not be loaded.');
     } finally {
       setLoading(false);
     }
@@ -87,40 +75,44 @@ export default function BusinessSetup() {
       setForm(prev => ({ ...prev, [field]: file_url }));
     } catch (err) {
       console.error(err);
+      setSetupError(err?.message || 'Image upload failed. Choose another image.');
     }
   };
 
   const saveProgress = async () => {
+    if (saving) return false;
     setSaving(true);
+    setSetupError('');
     try {
       const userData = await base44.auth.me();
-      const data = /** @type {any} */ ({
-        ...form,
-        tax_rate: Math.max(0, parseFloat(form.tax_rate) || 0),
+      // Persist only columns that exist in public.businesses. The browser
+      // must not copy protected Stripe or ownership fields back on updates.
+      const data = {
+        name: String(form.name || '').trim(),
+        logo_url: form.logo_url || null,
+        floor_plan_url: form.floor_plan_url || null,
+        address: form.address || null,
+        phone: form.phone || null,
+        email: form.email || userData.email || null,
+        tax_rate: Math.max(0, Number(form.tax_rate) || 0),
+        open_procedures: form.open_procedures || null,
+        close_procedures: form.close_procedures || null,
+        linked_customer_app_legacy_id: form.linked_customer_app_id || null,
         setup_complete: step >= 3,
-      });
-      // Ownership is set only at creation and never client-updated: a manager
-      // saving the settings form must not overwrite who owns the business.
-      if (!business) {
-        data.owner_user_id = userData.id;
-        data.owner_email = userData.email;
-      }
-
-      let savedBusiness = business;
-      if (business) {
-        await base44.entities.Business.update(business.id, data);
-        savedBusiness = { ...business, ...data };
-        setBusiness(savedBusiness);
-      } else {
-        savedBusiness = await base44.entities.Business.create(data);
-        setBusiness(savedBusiness);
-      }
-
-      // The backend claim function creates/updates the manager Employee record
-      // and protected User membership fields. Browser code cannot grant itself roles.
+      };
+      if (!data.name) throw new Error('Enter a business name before continuing.');
+      const savedBusiness = business
+        ? await base44.entities.Business.update(business.id, data)
+        : await base44.entities.Business.create({ ...data, owner_user_id: userData.id });
+      setBusiness(savedBusiness);
+      // This server action resolves the authenticated owner; it does not
+      // trust a role or permission supplied by the form.
       await base44.functions.invoke('claimVendorMembership', {});
+      return true;
     } catch (err) {
       console.error(err);
+      setSetupError(err?.message || 'Business information could not be saved.');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -200,7 +192,8 @@ export default function BusinessSetup() {
   };
 
   const nextStep = async () => {
-    await saveProgress();
+    const saved = await saveProgress();
+    if (!saved) return;
     if (step < 4) setStep(step + 1);
     else navigate(createPageUrl('Home'));
   };
@@ -250,6 +243,9 @@ export default function BusinessSetup() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {setupError && (
+              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{setupError}</p>
+            )}
             {step === 1 && (
               <>
                 <div className="space-y-2">
