@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, Navigate, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { base44 } from '@/api/base44Client';
 import { 
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ThemeProvider } from '@/components/ui/ThemeProvider';
-import { canAccessVendorPage, getVendorContext } from '@/lib/vendorContext';
+import { canAccessVendorPage, getVendorContext, shouldRedirectToBusinessSetup } from '@/lib/vendorContext';
 import { toast } from '@/components/ui/use-toast';
 
 const BOUTIQUE_BG = 'https://media.base44.com/images/public/69a25fa908ebd18cd4723d7c/b61041a41_generated_image.png';
@@ -36,16 +36,22 @@ export default function Layout({ children, currentPageName }) {
   const [user, setUser] = useState(null);
   const [employee, setEmployee] = useState(null);
   const [businessId, setBusinessId] = useState(null);
+  const [accessContext, setAccessContext] = useState(null);
+  const [accessError, setAccessError] = useState('');
+  const [loadedPath, setLoadedPath] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [loadingUser, setLoadingUser] = useState(true);
 
   useEffect(() => {
     loadUser();
-  }, []);
+  }, [location.pathname]);
 
   const loadUser = async () => {
+    setLoadingUser(true);
+    setAccessError('');
     try {
       const context = await getVendorContext();
+      setAccessContext(context);
       setUser(context.user);
       setEmployee(context.employee);
       setBusinessId(context.businessId);
@@ -55,7 +61,10 @@ export default function Layout({ children, currentPageName }) {
       }
     } catch (err) {
       console.error(err);
+      setAccessContext(null);
+      setAccessError('Unable to verify retailer access. Please retry.');
     } finally {
+      setLoadedPath(location.pathname);
       setLoadingUser(false);
     }
   };
@@ -78,7 +87,7 @@ export default function Layout({ children, currentPageName }) {
     base44.auth.logout();
   };
 
-  if (loadingUser) {
+  if (loadingUser || loadedPath !== location.pathname) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
         <div className="text-sm text-slate-500">Loading vendor access…</div>
@@ -86,7 +95,24 @@ export default function Layout({ children, currentPageName }) {
     );
   }
 
-  if (!canAccessVendorPage(currentPageName, employee)) {
+  if (accessError) {
+    return (
+      <ThemeProvider>
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-6">
+          <p role="alert" className="mb-4 text-slate-800">{accessError}</p>
+          <Button onClick={loadUser}>Retry</Button>
+        </div>
+      </ThemeProvider>
+    );
+  }
+
+  // A new retailer is allowed to configure their own business; do not
+  // interpret a missing employee record as authorization to access a store.
+  if (shouldRedirectToBusinessSetup(currentPageName, accessContext)) {
+    return <Navigate to={createPageUrl('BusinessSetup')} replace />;
+  }
+
+  if (!canAccessVendorPage(currentPageName, accessContext)) {
     return (
       <ThemeProvider>
         <div className="min-h-screen flex items-center justify-center bg-slate-100 p-6">
@@ -102,11 +128,11 @@ export default function Layout({ children, currentPageName }) {
     );
   }
 
-  const isManager = employee?.role === 'manager';
-  const permissions = employee?.permissions || {};
+  const isManager = accessContext?.vendorRole === 'manager';
+  const permissions = accessContext?.permissions || {};
 
   const bottomTabs = BOTTOM_TABS.filter(tab => {
-    if (tab.page === 'Checkout') return isManager || permissions.process_checkout !== false;
+    if (tab.page === 'Checkout') return isManager || Boolean(permissions.process_checkout);
     if (tab.page === 'Notifications') return isManager || Boolean(permissions.send_notifications);
     return true;
   });
@@ -116,7 +142,7 @@ export default function Layout({ children, currentPageName }) {
     { icon: MapPin, label: 'Floor View', page: 'FloorView', show: true },
     { icon: Users, label: 'Customers', page: 'Customers', show: true },
     { icon: Package, label: 'Inventory', page: 'Inventory', show: isManager || permissions.manage_inventory },
-    { icon: ShoppingCart, label: 'POS', page: 'Checkout', show: permissions.process_checkout !== false },
+    { icon: ShoppingCart, label: 'POS', page: 'Checkout', show: isManager || Boolean(permissions.process_checkout) },
     { icon: DoorOpen, label: 'Fitting Rooms', page: 'FittingRooms', show: true },
     { icon: Bell, label: 'Notifications', page: 'Notifications', show: isManager || permissions.send_notifications },
     { icon: BarChart3, label: 'Metrics', page: 'Metrics', show: isManager || permissions.view_metrics },
@@ -127,7 +153,7 @@ export default function Layout({ children, currentPageName }) {
     { icon: MapPin, label: 'Locations', page: 'Locations', show: isManager },
     { icon: FileText, label: 'FAQ', page: 'FAQ', show: true },
     { icon: Bell, label: 'Support', page: 'Support', show: true },
-    { icon: Settings, label: 'Settings', page: 'BusinessSetup', show: isManager }
+    { icon: Settings, label: 'Settings', page: 'BusinessSetup', show: isManager || !accessContext?.businessId }
   ].filter(item => item.show);
 
   const NavContent = () => (
@@ -176,7 +202,7 @@ export default function Layout({ children, currentPageName }) {
           )}
           <div className="flex-1 min-w-0">
             <p className="font-medium text-slate-900 truncate">{user?.full_name || 'User'}</p>
-            <p className="text-xs text-slate-500 truncate">{employee?.role || 'Staff'}</p>
+            <p className="text-xs text-slate-500 truncate">{accessContext?.vendorRole || 'Retailer setup'}</p>
           </div>
           <Button variant="ghost" size="icon" onClick={handleLogout} className="select-none">
             <LogOut className="w-4 h-4 text-slate-400" />

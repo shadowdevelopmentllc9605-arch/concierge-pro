@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 import { getVendorContext } from '@/lib/vendorContext';
+import { getRecentOnlineOrders, getTodayCompletedSales, formatOnlineOrderItems } from '@/lib/retailerOrders';
 
 export default function Home() {
   const navigate = useNavigate();
@@ -14,9 +15,12 @@ export default function Home() {
   const [business, setBusiness] = useState(null);
   const [employee, setEmployee] = useState(null);
   const [stats, setStats] = useState({ customers: 0, inventory: 0, sales: 0 });
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [loadError, setLoadError] = useState('');
 
   const loadData = useCallback(async () => {
     try {
+      setLoadError('');
       const context = await getVendorContext();
 
       if (!context.business || !context.businessId || !context.business.setup_complete) {
@@ -25,26 +29,22 @@ export default function Home() {
       }
 
       setBusiness(context.business);
-      setEmployee(context.employee);
+      // Business ownership grants manager actions even before the first
+      // Employee record is provisioned. getVendorContext checks ownership.
+      setEmployee(context.employee || (context.isManager
+        ? { role: 'manager', permissions: context.permissions }
+        : null));
 
       const [customers, inventory, purchases] = await Promise.all([
         base44.entities.StoreCustomer.filter({ in_store: true, business_id: context.businessId }),
         base44.entities.InventoryItem.filter({ business_id: context.businessId }),
-        base44.entities.Purchase.filter({ status: 'completed', business_id: context.businessId })
+        // Query only the authenticated store's purchases. The Supabase
+        // purchases RLS policy separately enforces this business boundary.
+        base44.entities.Purchase.filter({ business_id: context.businessId }, '-created_date', 40)
       ]);
 
-      const today = new Date();
-      const todaySales = purchases
-        .filter(purchase => {
-          if (!purchase.created_date) return false;
-          const created = new Date(purchase.created_date);
-          return (
-            created.getFullYear() === today.getFullYear() &&
-            created.getMonth() === today.getMonth() &&
-            created.getDate() === today.getDate()
-          );
-        })
-        .reduce((sum, purchase) => sum + (purchase.total || 0), 0);
+      const todaySales = getTodayCompletedSales(purchases);
+      setRecentOrders(getRecentOnlineOrders(purchases, context.businessId));
 
       setStats({
         customers: customers.length,
@@ -53,6 +53,7 @@ export default function Home() {
       });
     } catch (err) {
       console.error(err);
+      setLoadError('The retailer dashboard could not load store data. Pull to refresh and try again.');
     } finally {
       setLoading(false);
     }
@@ -75,7 +76,7 @@ export default function Home() {
     { icon: MapPin, label: 'Floor View', page: 'FloorView', color: 'bg-violet-500', show: true },
     { icon: Users, label: 'Customers', page: 'Customers', color: 'bg-emerald-500', show: true },
     { icon: Package, label: 'Inventory', page: 'Inventory', color: 'bg-amber-500', show: isManager || Boolean(permissions.manage_inventory) },
-    { icon: ShoppingCart, label: 'POS', page: 'Checkout', color: 'bg-blue-500', show: isManager || permissions.process_checkout !== false },
+    { icon: ShoppingCart, label: 'POS', page: 'Checkout', color: 'bg-blue-500', show: isManager || Boolean(permissions.process_checkout) },
     { icon: Bell, label: 'Notifications', page: 'Notifications', color: 'bg-rose-500', show: isManager || Boolean(permissions.send_notifications) },
     { icon: Building2, label: 'Settings', page: 'BusinessSetup', color: 'bg-slate-600', show: isManager }
   ].filter(action => action.show);
@@ -127,7 +128,7 @@ export default function Home() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 uppercase tracking-wide">Today's Sales</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 uppercase tracking-wide">Today's Merchandise Sales</p>
                     <p className="text-4xl font-bold text-slate-900 dark:text-white mt-1">${stats.sales.toFixed(2)}</p>
                   </div>
                   <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center">
@@ -137,6 +138,42 @@ export default function Home() {
               </CardContent>
             </Card>
           </div>
+
+          {loadError && <p role="alert" className="mb-4 rounded-xl bg-red-50 p-4 text-red-800">{loadError}</p>}
+
+          <section aria-labelledby="recent-online-orders" className="mb-8 rounded-2xl bg-white dark:bg-slate-800 p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <h2 id="recent-online-orders" className="text-lg font-semibold text-slate-900 dark:text-white">Recent Online Orders</h2>
+              <span className="text-xs text-slate-500">This store only</span>
+            </div>
+            {recentOrders.length === 0 ? (
+              <p className="text-sm text-slate-600 dark:text-slate-300">No online orders recorded for this store yet.</p>
+            ) : (
+              <ul className="space-y-3">
+                {recentOrders.map(order => (
+                  <li key={order.id} className="rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+                    <div className="flex justify-between gap-3 items-start">
+                      <div className="min-w-0">
+                        <p className="font-medium text-slate-900 dark:text-white">Order #{String(order.order_id || order.id).slice(-8)}</p>
+                        <p className="text-xs text-slate-500">
+                          {order.created_date ? new Date(order.created_date).toLocaleString() : 'Date unavailable'}
+                          {' · '}{order.status || 'Processing'}
+                        </p>
+                      </div>
+                      <div className="font-semibold text-slate-900 dark:text-white">
+                        ${Number(order.total || 0).toFixed(2)}
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-600 dark:text-slate-300 mt-2">{formatOnlineOrderItems(order)}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Concierge fee: ${Number(order.platform_fee_amount || 0).toFixed(2)} ·
+                      {order.platform_fee_status === 'collected' ? ' Collected' : ' Pending'}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-4">Quick Actions</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

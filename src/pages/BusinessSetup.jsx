@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { buildBusinessSetupPayload } from '@/lib/businessSetupPayload';
 
 export default function BusinessSetup() {
   const navigate = useNavigate();
@@ -18,6 +19,9 @@ export default function BusinessSetup() {
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [stripeBusy, setStripeBusy] = useState('');
   const [stripeError, setStripeError] = useState('');
+  const [setupError, setSetupError] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUploadMessage, setImageUploadMessage] = useState('');
   const [form, setForm] = useState({
     name: '',
     logo_url: '',
@@ -47,80 +51,86 @@ export default function BusinessSetup() {
       const userData = await base44.auth.me();
       let businesses = await base44.entities.Business.filter({ owner_user_id: userData.id });
 
-      if (businesses.length === 0 && userData.email) {
-        businesses = await base44.entities.Business.filter({ owner_email: userData.email });
-      }
-
-      if (businesses.length === 0) {
-        const legacyBusinesses = await base44.entities.Business.list();
-        if (
-          legacyBusinesses.length === 1 &&
-          !legacyBusinesses[0].owner_user_id &&
-          !legacyBusinesses[0].owner_email
-        ) {
-          businesses = legacyBusinesses;
-        }
-      }
-
       if (businesses.length > 0) {
         const existing = businesses[0];
         setBusiness(existing);
         setForm(prev => ({
           ...prev,
           ...existing,
+          linked_customer_app_id: existing.linked_customer_app_legacy_id || '',
           tax_rate: existing.tax_rate?.toString() || '0',
         }));
         if (existing.setup_complete) setStep(4);
       }
     } catch (err) {
       console.error(err);
+      setSetupError(err?.message || 'Your retailer information could not be loaded.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleFileUpload = async (e, field) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
+    if (!['logo_url', 'floor_plan_url'].includes(field)) {
+      setSetupError('This upload destination is not supported.');
+      return;
+    }
+    setSetupError('');
+    setImageUploadMessage('');
+    setUploadingImage(true);
     try {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        throw new Error('Choose a JPG, PNG, or WebP image.');
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('Choose an image smaller than 5 MB.');
+      }
       const { file_url } = await base44.integrations.Core.UploadFile({ file });
+      if (!file_url) throw new Error('The upload did not return an image URL.');
+      // Existing stores can change their image after onboarding. Persist only
+      // the one allowable field; never resend Stripe or ownership metadata.
+      if (business?.id) {
+        await base44.entities.Business.update(business.id, { [field]: file_url });
+        setBusiness(prev => ({ ...prev, [field]: file_url }));
+      }
       setForm(prev => ({ ...prev, [field]: file_url }));
+      setImageUploadMessage('Store image uploaded and saved.');
     } catch (err) {
       console.error(err);
+      setSetupError(err?.message || 'Image upload failed. Choose another image.');
+    } finally {
+      setUploadingImage(false);
+      e.target.value = '';
     }
   };
 
   const saveProgress = async () => {
+    if (saving) return false;
     setSaving(true);
+    setSetupError('');
     try {
       const userData = await base44.auth.me();
-      const data = /** @type {any} */ ({
-        ...form,
-        tax_rate: Math.max(0, parseFloat(form.tax_rate) || 0),
-        setup_complete: step >= 3,
+      const creating = !business;
+      const data = buildBusinessSetupPayload(form, {
+        userId: userData.id,
+        email: userData.email,
+        step,
+        creating,
       });
-      // Ownership is set only at creation and never client-updated: a manager
-      // saving the settings form must not overwrite who owns the business.
-      if (!business) {
-        data.owner_user_id = userData.id;
-        data.owner_email = userData.email;
-      }
-
-      let savedBusiness = business;
-      if (business) {
-        await base44.entities.Business.update(business.id, data);
-        savedBusiness = { ...business, ...data };
-        setBusiness(savedBusiness);
-      } else {
-        savedBusiness = await base44.entities.Business.create(data);
-        setBusiness(savedBusiness);
-      }
-
-      // The backend claim function creates/updates the manager Employee record
-      // and protected User membership fields. Browser code cannot grant itself roles.
+      const savedBusiness = creating
+        ? await base44.entities.Business.create(data)
+        : await base44.entities.Business.update(business.id, data);
+      setBusiness(savedBusiness);
+      // This server action resolves the authenticated owner; it does not
+      // trust a role or permission supplied by the form.
       await base44.functions.invoke('claimVendorMembership', {});
+      return true;
     } catch (err) {
       console.error(err);
+      setSetupError(err?.message || 'Business information could not be saved.');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -200,7 +210,8 @@ export default function BusinessSetup() {
   };
 
   const nextStep = async () => {
-    await saveProgress();
+    const saved = await saveProgress();
+    if (!saved) return;
     if (step < 4) setStep(step + 1);
     else navigate(createPageUrl('Home'));
   };
@@ -250,6 +261,9 @@ export default function BusinessSetup() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
+            {setupError && (
+              <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{setupError}</p>
+            )}
             {step === 1 && (
               <>
                 <div className="space-y-2">
@@ -396,6 +410,24 @@ export default function BusinessSetup() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Your business is set up!</h3>
                 <p className="text-slate-600 mb-6">Finish Stripe setup, then add employees and inventory.</p>
+
+                <div className="text-left rounded-2xl border p-5 mb-5 space-y-3">
+                  <p className="font-semibold">Store image</p>
+                  <p className="text-xs text-slate-500">Upload a non-sensitive test image to verify retailer media handling. Store logos are public.</p>
+                  <div className="flex items-center gap-3">
+                    {form.logo_url ? (
+                      <img src={form.logo_url} alt="Store image preview" className="w-20 h-20 object-cover rounded-lg" onError={() => setSetupError('The store image could not be displayed. Try another JPG or PNG.')} />
+                    ) : (
+                      <div className="w-20 h-20 bg-slate-100 rounded-lg flex items-center justify-center"><Building2 className="w-8 h-8 text-slate-500" /></div>
+                    )}
+                    <label className={`inline-flex items-center gap-2 rounded-lg px-3 py-3 text-sm font-medium ${uploadingImage ? 'bg-slate-100 text-slate-500' : 'bg-violet-100 text-violet-950 cursor-pointer'}`}>
+                      {uploadingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                      {uploadingImage ? 'Uploading…' : 'Upload test store image'}
+                      <input type="file" className="hidden" accept="image/jpeg,image/png,image/webp" disabled={uploadingImage} onChange={e => handleFileUpload(e, 'logo_url')} />
+                    </label>
+                  </div>
+                  {imageUploadMessage && <p role="status" className="text-sm text-emerald-700">{imageUploadMessage}</p>}
+                </div>
 
                 <div className="text-left rounded-2xl border border-violet-200 bg-violet-50 p-5 mb-5">
                   <div className="flex items-start gap-3">
