@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
-import { supabase } from '@/api/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Building2, Upload, MapPin, Check, ArrowRight, Loader2, Trash2, CreditCard, RefreshCw, Landmark, BadgeDollarSign } from 'lucide-react';
@@ -23,9 +22,6 @@ export default function BusinessSetup() {
   const [setupError, setSetupError] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [imageUploadMessage, setImageUploadMessage] = useState('');
-  const [storageAuditPath, setStorageAuditPath] = useState('');
-  const [storageAuditBusy, setStorageAuditBusy] = useState(false);
-  const [storageAuditResult, setStorageAuditResult] = useState(null);
   const [form, setForm] = useState({
     name: '',
     logo_url: '',
@@ -71,48 +67,6 @@ export default function BusinessSetup() {
       setSetupError(err?.message || 'Your retailer information could not be loaded.');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // TEMPORARY TEST-BRANCH DIAGNOSTIC: must be removed before production merge.
-  // Uses the actual signed-in synthetic retailer's Storage API session.
-  const runCrossAccountStorageAudit = async () => {
-    const shopperPrefix = '502c1322-0fe1-42ed-9337-25388a4cbd35/';
-    const target = storageAuditPath.trim();
-    setStorageAuditBusy(true);
-    setStorageAuditResult(null);
-    try {
-      const { data: auth, error: authError } = await supabase.auth.getUser();
-      if (authError || auth?.user?.email !== 'concierge-phase1-retailer@example.com') {
-        throw new Error('This diagnostic requires the signed-in synthetic retailer account.');
-      }
-      if (!target.startsWith(shopperPrefix) || target.includes('..') || !/\.(jpg|jpeg|png|webp)$/i.test(target)) {
-        throw new Error('Enter the synthetic shopper private image path, without the bucket name.');
-      }
-      const { data: bytes, error: readError } =
-        await supabase.storage.from('concierge-sensitive').download(target);
-      const { data: visible, error: listError } =
-        await supabase.storage.from('concierge-sensitive').list(shopperPrefix.slice(0, -1), { limit: 20 });
-
-      // A fresh path cannot collide with an existing object; this is a
-      // negative test, and should NOT create anything for another user.
-      const disposablePath = shopperPrefix + 'phase1-unauthorized-' + crypto.randomUUID() + '.png';
-      const pngBytes = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/zYkAAAAASUVORK5CYII='), c => c.charCodeAt(0));
-      const { data: written, error: writeError } =
-        await supabase.storage.from('concierge-sensitive').upload(disposablePath, pngBytes, { contentType: 'image/png', upsert: false });
-      const allowedPrivateRead = !!bytes && !readError;
-      const leakedList = Array.isArray(visible) && visible.length > 0;
-      const allowedWrite = !!written && !writeError;
-      setStorageAuditResult({
-        read: allowedPrivateRead ? 'UNSAFE — downloaded another account image' : readError ? 'BLOCKED' : 'INCONCLUSIVE',
-        list: leakedList ? 'UNSAFE — listed another account image' : listError ? 'BLOCKED' : 'BLOCKED (empty listing)',
-        write: allowedWrite ? 'UNSAFE — foreign file was created; stop release' : writeError ? 'BLOCKED' : 'INCONCLUSIVE',
-        safe: !allowedPrivateRead && !leakedList && !allowedWrite && !!readError && (!!listError || Array.isArray(visible)) && !!writeError
-      });
-    } catch (err) {
-      setStorageAuditResult({ error: err.message, safe: false });
-    } finally {
-      setStorageAuditBusy(false);
     }
   };
 
@@ -456,26 +410,6 @@ export default function BusinessSetup() {
                 </div>
                 <h3 className="text-xl font-semibold mb-2">Your business is set up!</h3>
                 <p className="text-slate-600 mb-6">Finish Stripe setup, then add employees and inventory.</p>
-
-                <div className="text-left rounded-2xl border border-amber-400 bg-amber-50 text-slate-900 p-5 mb-5 space-y-3">
-                  <p className="font-semibold">Phase One Storage API security audit (temporary test branch only)</p>
-                  <p className="text-xs">With the synthetic retailer logged in, attempt to read, list and create a file in the synthetic shopper's private folder. No private image is displayed. This control must be removed before production release.</p>
-                  <label htmlFor="storage-audit-path" className="block text-sm">Synthetic shopper image object path (without bucket name)</label>
-                  <input id="storage-audit-path" type="text" autoComplete="off" spellCheck={false} value={storageAuditPath} onChange={e => setStorageAuditPath(e.target.value)} className="w-full border rounded-lg px-3 py-3 text-xs text-slate-950 bg-white" placeholder="shopper-uuid/filename.jpg" />
-                  <Button type="button" onClick={runCrossAccountStorageAudit} disabled={storageAuditBusy || !storageAuditPath.trim()} className="w-full bg-slate-900 text-white">
-                    {storageAuditBusy ? 'Checking actual Storage API…' : 'Run cross-account denial checks'}
-                  </Button>
-                  {storageAuditResult && <div role="status" className="rounded-xl bg-white p-3 text-sm space-y-1">
-                    {storageAuditResult.error ? <p>{storageAuditResult.error}</p> : <>
-                      <p>Private download: {storageAuditResult.read}</p>
-                      <p>Private folder listing: {storageAuditResult.list}</p>
-                      <p>Unauthorized image upload: {storageAuditResult.write}</p>
-                    </>}
-                    <p className={storageAuditResult.safe ? 'font-bold text-green-800' : 'font-bold text-red-800'}>
-                      {storageAuditResult.safe ? 'PASS — signed-in retailer denied' : 'NOT PASSED — do not promote until investigated'}
-                    </p>
-                  </div>}
-                </div>
 
                 <div className="text-left rounded-2xl border p-5 mb-5 space-y-3">
                   <p className="font-semibold">Store image</p>
