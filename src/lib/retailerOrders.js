@@ -18,7 +18,17 @@ export function getTodayCompletedSales(purchases = [], now = new Date()) {
         d.getMonth() === now.getMonth() &&
         d.getDate() === now.getDate();
     })
-    .reduce((sum, p) => sum + (Number(p.total) || 0), 0);
+    .reduce((sum, p) => {
+      // Merchandise only: shipping and tax are separate from retailer sales.
+      const subtotal = Number(p.subtotal);
+      const total = Number(p.total);
+      const shipping = Number(p.shipping_amount || 0);
+      const tax = Number(p.tax_amount || 0);
+      const merchandise = p.subtotal != null && Number.isFinite(subtotal)
+        ? subtotal
+        : Math.max(0, (Number.isFinite(total) ? total : 0) - shipping - tax);
+      return sum + merchandise;
+    }, 0);
 }
 
 export function formatOnlineOrderItems(order) {
