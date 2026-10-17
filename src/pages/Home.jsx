@@ -128,7 +128,7 @@ export default function Home() {
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 uppercase tracking-wide">Today's Sales</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 uppercase tracking-wide">Today's Merchandise Sales</p>
                     <p className="text-4xl font-bold text-slate-900 dark:text-white mt-1">${stats.sales.toFixed(2)}</p>
                   </div>
                   <div className="w-14 h-14 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center">
