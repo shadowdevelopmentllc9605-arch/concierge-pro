@@ -25,7 +25,11 @@ export default function Home() {
       }
 
       setBusiness(context.business);
-      setEmployee(context.employee);
+      // Business ownership grants manager actions even before the first
+      // Employee record is provisioned. getVendorContext checks ownership.
+      setEmployee(context.employee || (context.isManager
+        ? { role: 'manager', permissions: context.permissions }
+        : null));
 
       const [customers, inventory, purchases] = await Promise.all([
         base44.entities.StoreCustomer.filter({ in_store: true, business_id: context.businessId }),
