@@ -4,7 +4,7 @@ import { getRecentOnlineOrders, getTodayCompletedSales, formatOnlineOrderItems }
 
 const b = 'synthetic-store';
 const rows = [
-  { id: 'sale1', business_id: b, order_id: 'order-123', purchase_type: 'online', status: 'completed', total: '34.99', created_date: '2026-10-17T04:20:26Z', platform_fee_amount: '1', items: [{product_name:'Phase One TEST Tee',size_label:'M',color_name:'Blue',quantity:1}] },
+  { id: 'sale1', business_id: b, order_id: 'order-123', purchase_type: 'online', status: 'completed', total: '34.99', subtotal: '25.00', shipping_amount: 9.99, created_date: '2026-10-17T04:20:26Z', platform_fee_amount: '1', items: [{product_name:'Phase One TEST Tee',size_label:'M',color_name:'Blue',quantity:1}] },
   { id: 'other-store', business_id: 'other', purchase_type: 'online', status: 'completed', total: 10000, created_date: '2026-10-17T04:30:26Z' },
   { id: 'instore', business_id: b, purchase_type: 'in_store', status: 'completed', total: 10, created_date: '2026-10-17T04:25:26Z' },
   { id: 'old', business_id: b, purchase_type: 'online', status: 'completed', total: 20, created_date: '2026-10-16T04:20:26Z' }
@@ -16,12 +16,12 @@ test('retailer recent online orders exclude other businesses and POS purchases',
   assert.deepEqual(getRecentOnlineOrders(rows, null), []);
 });
 
-test('today sales use numeric amounts and completed purchases only', () => {
+test('today merchandise sales exclude shipping and tax and count completed purchases only', () => {
   const current = new Date('2026-10-17T12:00:00Z');
   const sales = getTodayCompletedSales(rows.filter(x => x.business_id === b), current);
-  assert.equal(sales, 44.99);
+  assert.equal(sales, 35);
   const noPending = getTodayCompletedSales([...rows.filter(x => x.business_id === b), {status:'processing',total:200,created_date:'2026-10-17T08:00:00Z'}], current);
-  assert.equal(noPending, 44.99);
+  assert.equal(noPending, 35);
 });
 
 test('online order shows the purchased size, color, and quantity', () => {
