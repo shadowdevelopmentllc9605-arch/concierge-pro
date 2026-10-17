@@ -76,7 +76,7 @@ export default function Home() {
     { icon: MapPin, label: 'Floor View', page: 'FloorView', color: 'bg-violet-500', show: true },
     { icon: Users, label: 'Customers', page: 'Customers', color: 'bg-emerald-500', show: true },
     { icon: Package, label: 'Inventory', page: 'Inventory', color: 'bg-amber-500', show: isManager || Boolean(permissions.manage_inventory) },
-    { icon: ShoppingCart, label: 'POS', page: 'Checkout', color: 'bg-blue-500', show: isManager || Boolean(permissions.process_checkout) }
+    { icon: ShoppingCart, label: 'POS', page: 'Checkout', color: 'bg-blue-500', show: isManager || Boolean(permissions.process_checkout) },
     { icon: Bell, label: 'Notifications', page: 'Notifications', color: 'bg-rose-500', show: isManager || Boolean(permissions.send_notifications) },
     { icon: Building2, label: 'Settings', page: 'BusinessSetup', color: 'bg-slate-600', show: isManager }
   ].filter(action => action.show);
