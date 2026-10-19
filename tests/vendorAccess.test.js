@@ -36,3 +36,12 @@ test('non-manager cannot open business setup or privileged store pages', () => {
   assert.equal(canAccessVendorPage('Customers', associate), true);
   assert.equal(canAccessVendorPage('Checkout', { ...associate, permissions: { process_checkout: true } }), true);
 });
+
+test('retailer email-link login does not auto-register unknown accounts or redirect to shopper app', async () => {
+  const { readFileSync } = await import('node:fs');
+  const login = readFileSync(new URL('../src/components/SupabaseLogin.jsx', import.meta.url), 'utf8');
+  assert.match(login, /signInWithOtp\(\{/);
+  assert.match(login, /shouldCreateUser:\s*false/);
+  assert.match(login, /emailRedirectTo:\s*window\.location\.origin/);
+  assert.doesNotMatch(login, /emailRedirectTo:\s*['"`]https:\/\/the-concierge/);
+});
