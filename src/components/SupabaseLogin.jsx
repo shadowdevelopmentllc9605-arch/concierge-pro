@@ -22,7 +22,12 @@ export default function SupabaseLogin() {
     setMessage('');
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin }
+      options: {
+        // Concierge Pro sign-in must never silently create new shopper identities.
+        shouldCreateUser: false,
+        // Return the retailer to the same application they opened.
+        emailRedirectTo: window.location.origin
+      }
     });
     setWorking(false);
     setMessage(error ? error.message : 'Sign-in link sent. Check your email.');
