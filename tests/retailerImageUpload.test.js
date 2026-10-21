@@ -10,10 +10,11 @@ test('completed retailer setup offers an independent public test image upload', 
   assert.match(setup, /onChange=\{e => handleFileUpload\(e, 'logo_url'\)\}/);
 });
 
-test('image upload has type, size validation and saves only whitelisted field', () => {
+test('public store logo upload validates images and saves only the whitelisted field', () => {
   assert.match(setup, /'image\/jpeg', 'image\/png', 'image\/webp'/);
   assert.match(setup, /file\.size > 5 \* 1024 \* 1024/);
-  assert.match(setup, /\['logo_url', 'floor_plan_url'\]\.includes\(field\)/);
+  assert.match(setup, /if \(field !== 'logo_url'\)/);
+  assert.match(setup, /if \(field === 'floor_plan_url'\)/);
   assert.match(setup, /Business\.update\(business\.id, \{ \[field\]: file_url \}\)/);
   assert.match(setup, /Store image uploaded and saved/);
 });
