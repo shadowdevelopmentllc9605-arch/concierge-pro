@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Building2, Upload, MapPin, Check, ArrowRight, Loader2, Trash2, CreditCard, RefreshCw, Landmark, BadgeDollarSign } from 'lucide-react';
+import { Building2, Upload, Check, ArrowRight, Loader2, Trash2, CreditCard, RefreshCw, Landmark, BadgeDollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -73,7 +73,13 @@ export default function BusinessSetup() {
   const handleFileUpload = async (e, field) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!['logo_url', 'floor_plan_url'].includes(field)) {
+    if (field === 'floor_plan_url') {
+      // Floor plans must never be uploaded through the publicly served photo bucket.
+      setSetupError('Floor plan uploads are paused until private storage recovery is production-ready. You can continue without one.');
+      e.target.value = '';
+      return;
+    }
+    if (field !== 'logo_url') {
       setSetupError('This upload destination is not supported.');
       return;
     }
@@ -350,32 +356,23 @@ export default function BusinessSetup() {
 
             {step === 2 && (
               <div className="space-y-4">
-                <p className="text-slate-600">Upload your store floor plan to help track customer locations and manage item placements.</p>
-                
-                <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center">
-                  {form.floor_plan_url ? (
-                    <div className="space-y-4">
-                      <img src={form.floor_plan_url} alt="Floor Plan" className="max-w-full h-auto rounded-lg mx-auto" />
-                      <label className="cursor-pointer inline-block">
-                        <div className="px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-lg transition text-sm font-medium">
-                          Replace Image
-                        </div>
-                        <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'floor_plan_url')} />
-                      </label>
-                    </div>
-                  ) : (
-                    <label className="cursor-pointer block">
-                      <div className="flex flex-col items-center gap-3 text-slate-500">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center">
-                          <MapPin className="w-8 h-8" />
-                        </div>
-                        <p className="font-medium">Click to upload floor plan</p>
-                        <p className="text-sm text-slate-400">PNG, JPG up to 10MB</p>
-                      </div>
-                      <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'floor_plan_url')} />
-                    </label>
-                  )}
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-3">
+                  <p className="font-medium text-amber-950">Floor plan uploads are temporarily paused</p>
+                  <p className="text-sm text-amber-900">
+                    Store floor plans may contain sensitive information about your layout and security.
+                    We will enable private uploads only after protected image storage, automated backups,
+                    and account-level recovery checks are production-ready.
+                  </p>
+                  <p className="text-sm text-amber-900">
+                    You can continue setting up your business without uploading a floor plan.
+                  </p>
                 </div>
+                {form.floor_plan_url && (
+                  <p role="status" className="text-sm text-amber-900">
+                    A previous floor plan reference is on file. It will not be re-uploaded.
+                    Its storage permissions must be reviewed before using or sharing it.
+                  </p>
+                )}
               </div>
             )}
 
