@@ -1,4 +1,5 @@
 import { supabase } from '@/api/supabaseClient';
+import { validateImageUpload, MAX_PUBLIC_IMAGE_BYTES, MAX_PRIVATE_IMAGE_BYTES } from '@/lib/imageUploadValidation';
 import { normalizePurchaseItem } from '@/lib/purchaseItems';
 
 const directTables = {
@@ -355,7 +356,7 @@ export const base44 = {
       async UploadFile({ file }) {
         const { data: auth, error: authError } = await supabase.auth.getUser();
         if (authError || !auth?.user?.id) throw new Error('Sign in before uploading an image.');
-        if (!file) throw new Error('Choose an image to upload.');
+        validateImageUpload(file, MAX_PUBLIC_IMAGE_BYTES);
         const safeName = String(file.name || 'upload').replace(/[^a-zA-Z0-9._-]/g, '_');
         const path = auth.user.id + '/' + crypto.randomUUID() + '-' + safeName;
         const upload = await supabase.storage.from('concierge-uploads').upload(path, file, { upsert: false });
@@ -365,9 +366,14 @@ export const base44 = {
       },
       // Sensitive body and measurement scans must never be served from the public bucket.
       async UploadPrivateFile({ file }) {
+        // Production must fail closed until repeatable offsite encrypted backup,
+        // key custody and recovery operations are independently release-verified.
+        if (import.meta.env.VITE_PRIVATE_UPLOADS_ENABLED !== 'true') {
+          throw new Error('Private photo uploads are temporarily unavailable until secure image backups are configured.');
+        }
         const { data: auth, error: authError } = await supabase.auth.getUser();
         if (authError || !auth?.user?.id) throw new Error('Sign in before uploading an image.');
-        if (!file) throw new Error('Choose an image to upload.');
+        validateImageUpload(file, MAX_PRIVATE_IMAGE_BYTES);
         const safeName = String(file.name || 'upload').replace(/[^a-zA-Z0-9._-]/g, '_');
         const path = auth.user.id + '/' + crypto.randomUUID() + '-' + safeName;
         const upload = await supabase.storage.from('concierge-sensitive').upload(path, file, { upsert: false });
