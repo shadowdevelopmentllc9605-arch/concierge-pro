@@ -6,6 +6,7 @@ import { validateImageUpload, MAX_PUBLIC_IMAGE_BYTES, MAX_PRIVATE_IMAGE_BYTES } 
 const adapter = readFileSync(new URL('../src/api/base44Client.js', import.meta.url), 'utf8');
 const setup = readFileSync(new URL('../src/pages/BusinessSetup.jsx', import.meta.url), 'utf8');
 const inventory = readFileSync(new URL('../src/pages/Inventory.jsx', import.meta.url), 'utf8');
+const locations = readFileSync(new URL('../src/pages/Locations.jsx', import.meta.url), 'utf8');
 const sample = (type, size) => ({ name: 'test.jpg', type, size });
 
 test('public images accept only JPEG/PNG/WebP with nonempty size at or below 10 MB', () => {
@@ -57,4 +58,12 @@ test('floor plan upload is hard-blocked and removed from retailer setup UI', () 
   assert.doesNotMatch(setup, /onChange=\{\(e\) => handleFileUpload\(e, 'floor_plan_url'\)\}/);
   assert.match(setup, /Upload test store image/);
   assert.match(setup, /You can continue setting up your business/);
+});
+
+test('location editor cannot upload private floor plans to the public bucket', () => {
+  assert.doesNotMatch(locations, /Core\.UploadFile\(/);
+  assert.doesNotMatch(locations, /onChange=\{uploadFloorPlan\}/);
+  assert.doesNotMatch(locations, /type="file"/);
+  assert.match(locations, /Floor Plan — uploads paused/);
+  assert.match(locations, /You can save this location without a floor plan/);
 });
