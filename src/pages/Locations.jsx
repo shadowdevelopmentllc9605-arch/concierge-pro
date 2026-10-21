@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
-import { MapPin, Plus, Pencil, Trash2, Loader2, Upload, RefreshCw } from 'lucide-react';
+import { MapPin, Plus, Pencil, Trash2, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -59,13 +59,6 @@ export default function Locations() {
       active: location.active !== false,
     } : { ...emptyForm });
     setDialogOpen(true);
-  };
-
-  const uploadFloorPlan = async (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    setForm(prev => ({ ...prev, floor_plan_url: file_url }));
   };
 
   const save = async () => {
@@ -204,15 +197,17 @@ export default function Locations() {
               <div><Label>Longitude</Label><Input type="number" step="0.000001" value={form.lng} onChange={e => setForm({ ...form, lng: e.target.value })} /></div>
             </div>
             <div><Label>Sales Tax Rate (%)</Label><Input type="number" min="0" step="0.01" value={form.tax_rate} onChange={e => setForm({ ...form, tax_rate: e.target.value })} /></div>
-            <div>
-              <Label>Floor Plan</Label>
-              <div className="mt-2 flex gap-3 items-center">
-                {form.floor_plan_url && <img src={form.floor_plan_url} alt="" className="w-20 h-20 object-contain bg-slate-100 rounded-lg" />}
-                <label className="cursor-pointer px-3 py-2 rounded-lg border text-sm flex items-center gap-2">
-                  <Upload className="w-4 h-4" /> Upload
-                  <input type="file" className="hidden" accept="image/*" onChange={uploadFloorPlan} />
-                </label>
-              </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-1">
+              <Label>Floor Plan — uploads paused</Label>
+              <p className="text-sm text-amber-900">
+                Floor plans can reveal sensitive store layouts. Do not upload them
+                to public Storage. You can save this location without a floor plan.
+              </p>
+              {form.floor_plan_url && (
+                <p className="text-xs text-amber-900" role="status">
+                  An existing floor plan reference is on file. Its visibility must be reviewed before reuse.
+                </p>
+              )}
             </div>
             <div className="flex items-center justify-between"><Label>Default location</Label><Switch checked={form.is_default} onCheckedChange={value => setForm({ ...form, is_default: value })} /></div>
             <div className="flex items-center justify-between"><Label>Active</Label><Switch checked={form.active} onCheckedChange={value => setForm({ ...form, active: value })} /></div>
