@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Building2, Upload, Check, ArrowRight, Loader2, Trash2, CreditCard, RefreshCw, Landmark, BadgeDollarSign } from 'lucide-react';
+import { Building2, Upload, Check, ArrowRight, Loader2, CreditCard, RefreshCw, Landmark, BadgeDollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +16,6 @@ export default function BusinessSetup() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [business, setBusiness] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [stripeBusy, setStripeBusy] = useState('');
   const [stripeError, setStripeError] = useState('');
   const [setupError, setSetupError] = useState('');
@@ -195,23 +194,6 @@ export default function BusinessSetup() {
       console.error(err);
       setStripeError(err?.response?.data?.error || err?.message || 'Subscription checkout could not be started.');
       setStripeBusy('');
-    }
-  };
-
-  const deleteAccount = async () => {
-    if (!deleteConfirm) {
-      setDeleteConfirm(true);
-      return;
-    }
-
-    try {
-      const response = await base44.functions.invoke('deleteVendorBusiness', {});
-      const result = response?.data || response;
-      if (!result?.success) throw new Error(result?.error || 'Business data could not be deleted.');
-      base44.auth.logout();
-    } catch (err) {
-      console.error(err);
-      alert(err?.response?.data?.error || err?.message || 'Business data could not be deleted.');
     }
   };
 
@@ -527,41 +509,23 @@ export default function BusinessSetup() {
             </div>
 
             {business && step === 4 && (
-              <div className="pt-6 border-t mt-2">
-                <p className="text-xs text-slate-400 mb-2 text-center">Danger Zone</p>
-                {deleteConfirm ? (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => setDeleteConfirm(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      className="flex-1"
-                      onClick={deleteAccount}
-                    >
-                      Yes, Delete Everything
-                    </Button>
-                  </div>
-                ) : (
-                  <Button
-                    variant="outline"
-                    className="w-full text-red-600 border-red-200 hover:bg-red-50"
-                    onClick={deleteAccount}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete Account
-                  </Button>
-                )}
-                {deleteConfirm && (
-                  <p className="text-xs text-red-500 text-center mt-2">
-                    This permanently deletes this business, its Concierge Pro records, your Base44 owner sign-in account, and linked catalog data in The Concierge. Employee logins are retained but their access to this business is revoked. Base44 does not currently expose an SDK method to purge previously uploaded files from storage.
-                  </p>
-                )}
-              </div>
+              <section aria-labelledby="data-removal-heading" className="pt-6 border-t mt-2 space-y-3">
+                <h3 id="data-removal-heading" className="text-sm font-semibold text-slate-700">
+                  Account and business data removal
+                </h3>
+                <p className="text-sm text-slate-600">
+                  Automatic deletion is not available yet. To request removal of your account,
+                  store, or linked records, contact Shadow Development LLC. We'll verify ownership,
+                  explain what can be removed and what must be retained, and confirm when processing is complete.
+                  Nothing is deleted just by opening this page or sending a request.
+                </p>
+                <a
+                  href="mailto:shadowdevelopmentllc9605@gmail.com?subject=Concierge%20Pro%20data%20removal%20request"
+                  className="inline-flex min-h-11 items-center justify-center w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                >
+                  Request data removal by email
+                </a>
+              </section>
             )}
           </CardContent>
         </Card>
