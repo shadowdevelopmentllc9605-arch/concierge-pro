@@ -521,7 +521,7 @@ export default function BusinessSetup() {
                 </p>
                 <a
                   href="mailto:shadowdevelopmentllc9605@gmail.com?subject=Concierge%20Pro%20data%20removal%20request"
-                  className="inline-flex min-h-11 items-center justify-center w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50"
+                  className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border-2 border-red-600 !bg-red-400 px-4 py-3 text-center text-sm font-bold !text-black hover:!bg-red-300 hover:!text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2"
                 >
                   Request data removal by email
                 </a>
