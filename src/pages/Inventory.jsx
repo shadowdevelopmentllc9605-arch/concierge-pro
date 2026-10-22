@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabaseClient';
+import { normalizeRetailerOffers } from '@/lib/retailerCatalogOffers';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 import { Plus, Pencil, Trash2, Package, Search, AlertTriangle, Loader2, X, Image, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -29,6 +31,8 @@ const inferCategoryGroup = (category = '') => {
 
 export default function Inventory() {
   const [items, setItems] = useState([]);
+  const [onlineOffers, setOnlineOffers] = useState([]);
+  const [offerError, setOfferError] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -90,6 +94,8 @@ export default function Inventory() {
 
       if (!context.businessId) {
         setItems([]);
+        setOnlineOffers([]);
+        setOfferError('');
         return;
       }
 
@@ -101,6 +107,37 @@ export default function Inventory() {
       setItems(data);
       setLocations(locationData);
       setBrandCharts(sizingData);
+
+      // The shopper checkout decrements retailer_offer stock, NOT the separate
+      // inventory_items table. Display its source of truth as a read-only panel.
+      setOfferError('');
+      try {
+        const { data: offerRows, error: offersError } = await supabase.from('retailer_offer')
+          .select('id,business_id,product_master_id,product_variant_id,retailer_sku,regular_price,current_price,sale_price,sale_active,availability,stock_quantity,active,channel,updated_at')
+          .eq('business_id', String(context.businessId))
+          .eq('active', true)
+          .order('updated_at', { ascending: false })
+          .limit(200);
+        if (offersError) throw offersError;
+
+        const masterIds = [...new Set((offerRows || []).map(row => row.product_master_id).filter(Boolean))];
+        const variantIds = [...new Set((offerRows || []).map(row => row.product_variant_id).filter(Boolean))];
+        const [masterResult, variantResult] = await Promise.all([
+          masterIds.length
+            ? supabase.from('product_master').select('id,product_name,brand_name,primary_image_url').in('id', masterIds)
+            : Promise.resolve({ data: [], error: null }),
+          variantIds.length
+            ? supabase.from('product_variant').select('id,sku,size_label,color_name,width_code').in('id', variantIds)
+            : Promise.resolve({ data: [], error: null })
+        ]);
+        if (masterResult.error) throw masterResult.error;
+        if (variantResult.error) throw variantResult.error;
+        setOnlineOffers(normalizeRetailerOffers(offerRows || [], masterResult.data || [], variantResult.data || [], context.businessId));
+      } catch (error) {
+        console.error('Could not load online offers', error);
+        setOnlineOffers([]);
+        setOfferError('Online catalog offers could not be loaded. Local inventory is still available.');
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -354,6 +391,9 @@ export default function Inventory() {
   );
 
   const lowStockCount = items.filter(i => i.stock_quantity <= (i.low_stock_threshold || 5)).length;
+  const filteredOnlineOffers = onlineOffers.filter(offer =>
+    [offer.name, offer.brand, offer.sku, offer.variant].some(value => String(value || '').toLowerCase().includes(search.toLowerCase()))
+  );
 
   const inferredCategoryGroup = inferCategoryGroup(form.category);
   const availableBrandCharts = brandCharts.filter(chart => {
@@ -427,6 +467,635 @@ export default function Inventory() {
             {syncMessage}
           </div>
         )}
+
+        <section aria-labelledby="online-storefront-offers" className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 id="online-storefront-offers" className="text-lg font-semibold text-slate-900">Online storefront offers</h2>
+            <span className="rounded-md border border-slate-300 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700">Read-only</span>
+          </div>
+          <p className="mb-3 text-sm text-slate-600">
+            These offers supply the shopper catalog and online checkout. Their available stock is separate from the editable local inventory below; no stock has been copied or synchronized between these lists.
+          </p>
+          {offerError ? (
+            <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{offerError}</p>
+          ) : filteredOnlineOffers.length === 0 ? (
+            <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+              {onlineOffers.length ? 'No online offers match this search.' : 'No active online catalog offers are linked to this store yet.'}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-slate-600">
+                  <tr>
+                    <th scope="col" className="px-2 py-2">Product</th>
+                    <th scope="col" className="px-2 py-2">Variant / SKU</th>
+                    <th scope="col" className="px-2 py-2 text-right">Online price</th>
+                    <th scope="col" className="px-2 py-2 text-right">Offer stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOnlineOffers.map(offer => (
+                    <tr key={offer.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-2 py-3">
+                        <div className="flex items-center gap-2">
+                          {offer.image ? <img src={offer.image} alt="" className="h-10 w-10 rounded-md object-cover" /> :
+                            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100"><Package className="h-5 w-5 text-slate-400" /></span>}
+                          <span><span className="block font-medium text-slate-900">{offer.name}</span><span className="text-xs text-slate-500">{offer.brand}</span></span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3 text-slate-700">
+                        {offer.variant || 'No variant specified'}{offer.sku && <span className="block text-xs text-slate-500">{offer.sku}</span>}
+                      </td>
+                      <td className="px-2 py-3 text-right font-medium text-slate-900">
+                        {offer.price === null ? 'Not set' : '
+          <Card className="border-amber-200 bg-amber-50 mb-6">
+            <CardContent className="p-4 flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600" />
+              <span className="text-amber-800 font-medium">{lowStockCount} items are running low on stock</span>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card className="border-0 shadow-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50">
+                <TableHead>Item</TableHead>
+                <TableHead>SKU</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead className="text-right">Price</TableHead>
+                <TableHead className="text-right">Stock</TableHead>
+                <TableHead></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((item) => (
+                <TableRow key={item.id}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      {item.images?.[0] ? (
+                        <img src={item.images[0]} alt="" className="w-12 h-12 rounded-lg object-cover" />
+                      ) : (
+                        <div className="w-12 h-12 bg-slate-100 rounded-lg flex items-center justify-center">
+                          <Package className="w-5 h-5 text-slate-400" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-medium text-slate-900">{item.name}</p>
+                        {item.sizes?.length > 0 && (
+                          <p className="text-xs text-slate-500">{item.sizes.join(', ')}</p>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-slate-600">{item.sku || '-'}</TableCell>
+                  <TableCell>
+                    {item.category && (
+                      <Badge variant="secondary">{item.category}</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right font-medium">${item.price?.toFixed(2)}</TableCell>
+                  <TableCell className="text-right">
+                    <Badge className={item.stock_quantity <= (item.low_stock_threshold || 5) 
+                      ? 'bg-red-100 text-red-700' 
+                      : 'bg-emerald-100 text-emerald-700'
+                    }>
+                      {item.stock_quantity}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1 justify-end">
+                      <Button size="sm" variant="ghost" onClick={() => openDialog(item)}>
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => deleteItem(item.id)} className="text-red-600">
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          
+          {filtered.length === 0 && (
+            <div className="p-12 text-center">
+              <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500">No items found</p>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editing ? 'Edit Item' : 'Add Item'}</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Images</Label>
+              <div className="flex flex-wrap gap-2">
+                {form.images?.map((url, i) => (
+                  <div key={i} className="relative">
+                    <img src={url} alt="" className="w-20 h-20 rounded-lg object-cover" />
+                    <button
+                      onClick={() => removeImage(i)}
+                      aria-label="Remove product image"
+                      className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center"
+                    >
+                      <X className="w-3 h-3 text-white" />
+                    </button>
+                  </div>
+                ))}
+                <label className="w-20 h-20 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center cursor-pointer hover:border-violet-400 transition">
+                  <Image className="w-6 h-6 text-slate-400" />
+                  <input type="file" className="hidden" accept="image/*" multiple onChange={handleImageUpload} />
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Name *</Label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Product name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>SKU</Label>
+                <Input
+                  value={form.sku}
+                  onChange={(e) => setForm({ ...form, sku: e.target.value })}
+                  placeholder="SKU-001"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Brand</Label>
+                <Input
+                  value={form.brand}
+                  onChange={(e) => {
+                    setSelectedBrandChartId('');
+                    setForm({ ...form, brand: e.target.value });
+                  }}
+                  placeholder="Brand"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Style</Label>
+                <select
+                  value={form.style_type}
+                  onChange={(e) => setForm({ ...form, style_type: e.target.value })}
+                  className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                >
+                  <option value="business">Business</option>
+                  <option value="casual">Casual</option>
+                  <option value="formal">Formal</option>
+                  <option value="evening">Evening</option>
+                  <option value="outdoor">Outdoor</option>
+                  <option value="active">Active</option>
+                  <option value="nightlife">Nightlife</option>
+                  <option value="trendy">Trendy</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Location</Label>
+              <select
+                value={form.location_id}
+                onChange={(e) => setForm({ ...form, location_id: e.target.value })}
+                className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              >
+                <option value="">All / default location</option>
+                {locations.map(location => (
+                  <option key={location.id} value={location.id}>{location.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Input
+                value={form.category}
+                onChange={(e) => {
+                  setSelectedBrandChartId('');
+                  setForm({ ...form, category: e.target.value });
+                }}
+                placeholder="e.g. Shirts, Pants, Shoes, Boots"
+              />
+            </div>
+
+            {inferredCategoryGroup === 'footwear' && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+                <div>
+                  <Label>Footwear Type</Label>
+                  <select
+                    value={form.footwear_type}
+                    onChange={(e) => {
+                      setSelectedBrandChartId('');
+                      setForm({ ...form, footwear_type: e.target.value });
+                    }}
+                    className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="all">General / not specified</option>
+                    <option value="athletic_running">Athletic — Running</option>
+                    <option value="athletic_training">Athletic — Training</option>
+                    <option value="walking">Walking</option>
+                    <option value="casual_sneaker">Casual Sneaker</option>
+                    <option value="dress_oxford_derby">Dress — Oxford / Derby</option>
+                    <option value="loafer_slipon">Loafer / Slip-on</option>
+                    <option value="boot_work">Boot — Work</option>
+                    <option value="boot_hiking">Boot — Hiking / Outdoor</option>
+                    <option value="boot_fashion">Boot — Fashion / Dress</option>
+                    <option value="sandal">Sandal</option>
+                    <option value="heel_pump">Heel / Pump</option>
+                    <option value="other">Other Footwear</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Available Widths</Label>
+                    <Input
+                      className="mt-2"
+                      value={form.width_options}
+                      onChange={(e) => setForm({ ...form, width_options: e.target.value })}
+                      placeholder="D, E, 2E or M, W"
+                    />
+                  </div>
+                  <div>
+                    <Label>Last / Fit Family</Label>
+                    <Input
+                      className="mt-2"
+                      value={form.footwear_last_name}
+                      onChange={(e) => setForm({ ...form, footwear_last_name: e.target.value })}
+                      placeholder="e.g. 65 Last"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label>Fit Profile</Label>
+                    <select
+                      value={form.footwear_fit_profile}
+                      onChange={(e) => setForm({ ...form, footwear_fit_profile: e.target.value })}
+                      className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    >
+                      <option value="unknown">Not specified</option>
+                      <option value="true_to_size">True to size</option>
+                      <option value="snug">Snug</option>
+                      <option value="roomy">Roomy</option>
+                      <option value="runs_small">Runs small</option>
+                      <option value="runs_large">Runs large</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label>Official Size Adjustment</Label>
+                    <select
+                      value={form.footwear_size_adjustment_steps}
+                      onChange={(e) => setForm({ ...form, footwear_size_adjustment_steps: e.target.value })}
+                      className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                    >
+                      <option value="0">No automatic adjustment</option>
+                      <option value="-2">Down 1 full size</option>
+                      <option value="-1">Down ½ size</option>
+                      <option value="1">Up ½ size</option>
+                      <option value="2">Up 1 full size</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label>Sock Profile</Label>
+                  <select
+                    value={form.footwear_sock_profile}
+                    onChange={(e) => setForm({ ...form, footwear_sock_profile: e.target.value })}
+                    className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="not_applicable">Not specified</option>
+                    <option value="thin">Thin / dress sock</option>
+                    <option value="standard">Standard sock</option>
+                    <option value="thick">Thick / boot sock</option>
+                    <option value="varies">Varies by use</option>
+                  </select>
+                </div>
+
+                <div>
+                  <Label>Official / Product Fit Notes</Label>
+                  <Textarea
+                    className="mt-2"
+                    value={form.footwear_fit_notes}
+                    onChange={(e) => setForm({ ...form, footwear_fit_notes: e.target.value })}
+                    placeholder="Use only published brand/product guidance; do not guess a size adjustment."
+                    rows={3}
+                  />
+                </div>
+                <p className="text-xs text-slate-500">
+                  Width-specific variants can use a width_code field in Variant Stock JSON, for example D, E, 2E, B, Wide, or Narrow.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="Product description..."
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Price ($)</Label>
+                <Input
+                  type="number"
+                  value={form.price}
+                  onChange={(e) => setForm({ ...form, price: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Cost ($)</Label>
+                <Input
+                  type="number"
+                  value={form.cost}
+                  onChange={(e) => setForm({ ...form, cost: e.target.value })}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Stock Quantity</Label>
+                <Input
+                  type="number"
+                  value={form.stock_quantity}
+                  onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Low Stock Alert</Label>
+                <Input
+                  type="number"
+                  value={form.low_stock_threshold}
+                  onChange={(e) => setForm({ ...form, low_stock_threshold: e.target.value })}
+                  placeholder="5"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <Label>Item Dimensions</Label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.dimension_width}
+                  onChange={(e) => setForm({ ...form, dimension_width: e.target.value })}
+                  placeholder="Width"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.dimension_height}
+                  onChange={(e) => setForm({ ...form, dimension_height: e.target.value })}
+                  placeholder="Height"
+                />
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.dimension_depth}
+                  onChange={(e) => setForm({ ...form, dimension_depth: e.target.value })}
+                  placeholder="Depth"
+                />
+                <select
+                  value={form.dimension_unit}
+                  onChange={(e) => setForm({ ...form, dimension_unit: e.target.value })}
+                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                >
+                  <option value="inches">inches</option>
+                  <option value="cm">cm</option>
+                </select>
+              </div>
+              <p className="text-xs text-slate-500">
+                Dimensions support product placement and future fit/mirror integrations.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Virtual Try-On Asset</Label>
+              <div className="flex gap-3 items-center">
+                {form.tryOn_image && <img src={form.tryOn_image} alt="Try-on asset" className="w-16 h-16 object-contain bg-slate-100 rounded-lg" />}
+                <label className="px-3 py-2 rounded-lg border border-slate-200 cursor-pointer text-sm">
+                  Upload transparent garment image
+                  <input type="file" className="hidden" accept="image/*" onChange={handleTryOnUpload} />
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Sizes (comma separated)</Label>
+                <Input
+                  value={form.sizes}
+                  onChange={(e) => setForm({ ...form, sizes: e.target.value })}
+                  placeholder="S, M, L, XL"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Colors (comma separated)</Label>
+                <Input
+                  value={form.colors}
+                  onChange={(e) => setForm({ ...form, colors: e.target.value })}
+                  placeholder="Black, White, Blue"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Verified Brand Size Chart</Label>
+              <select
+                value={selectedBrandChartId}
+                onChange={(e) => applyVerifiedChart(e.target.value)}
+                className="w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                disabled={!form.brand || availableBrandCharts.length === 0}
+              >
+                <option value="">
+                  {!form.brand
+                    ? 'Enter a brand first'
+                    : availableBrandCharts.length
+                      ? 'Select a verified chart (optional)'
+                      : 'No verified chart currently available'}
+                </option>
+                {availableBrandCharts.map(chart => (
+                  <option key={chart.id} value={chart.id}>
+                    {chart.audience} • {chart.chart_name} • {chart.region}
+                  </option>
+                ))}
+              </select>
+              {selectedBrandChart && (
+                <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800">
+                  Loaded {selectedBrandChart.entries?.length || 0} verified size rows from {selectedBrandChart.brand_name}.
+                  {' '}
+                  <a
+                    href={selectedBrandChart.source_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline font-medium"
+                  >
+                    Official source
+                  </a>
+                </div>
+              )}
+              <p className="text-xs text-slate-500">
+                Selecting a verified chart copies its centimeter measurements into this product. You can still edit the product chart below when a specific garment differs from the brand standard.
+              </p>
+            </div>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+              <div>
+                <h3 className="font-semibold text-slate-900">Fit & Construction Data</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  This data lets The Concierge distinguish garments that share a labeled size but fit differently.
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Size Chart Basis</Label>
+                  <select
+                    value={form.size_chart_measurement_basis}
+                    onChange={(e) => setForm({ ...form, size_chart_measurement_basis: e.target.value })}
+                    className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="body">Body measurements</option>
+                    <option value="garment">Finished garment measurements</option>
+                    <option value="mixed">Mixed</option>
+                    <option value="unknown">Unknown</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Cut / Silhouette</Label>
+                  <select
+                    value={form.garment_fit_cut}
+                    onChange={(e) => setForm({ ...form, garment_fit_cut: e.target.value })}
+                    className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                  >
+                    <option value="unknown">Unknown</option>
+                    <option value="compression">Compression</option>
+                    <option value="skinny">Skinny</option>
+                    <option value="slim">Slim</option>
+                    <option value="tailored">Tailored</option>
+                    <option value="regular">Regular</option>
+                    <option value="relaxed">Relaxed</option>
+                    <option value="oversized">Oversized</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label>Stretch</Label>
+                  <select value={form.garment_stretch_level} onChange={(e) => setForm({ ...form, garment_stretch_level: e.target.value })} className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
+                    <option value="unknown">Unknown</option><option value="none">None</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Fabric Behavior</Label>
+                  <select value={form.garment_fabric_behavior} onChange={(e) => setForm({ ...form, garment_fabric_behavior: e.target.value })} className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
+                    <option value="unknown">Unknown</option><option value="rigid">Rigid</option><option value="structured">Structured</option><option value="draped">Draped</option><option value="stretchy">Stretchy</option><option value="mixed">Mixed</option>
+                  </select>
+                </div>
+                <div>
+                  <Label>Layering</Label>
+                  <select value={form.garment_layering_allowance} onChange={(e) => setForm({ ...form, garment_layering_allowance: e.target.value })} className="mt-2 w-full h-10 rounded-md border border-slate-200 bg-white px-3 text-sm">
+                    <option value="unknown">Unknown</option><option value="none">None</option><option value="light">Light</option><option value="standard">Standard</option><option value="heavy">Heavy</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <Label>Published Fit Notes</Label>
+                <Textarea value={form.garment_fit_notes} onChange={(e) => setForm({ ...form, garment_fit_notes: e.target.value })} rows={2} className="mt-2" placeholder="e.g. tailored through chest; size up for layering" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Input value={form.garment_fit_source} onChange={(e) => setForm({ ...form, garment_fit_source: e.target.value })} placeholder="Data source / manufacturer" />
+                <Input value={form.garment_fit_source_url} onChange={(e) => setForm({ ...form, garment_fit_source_url: e.target.value })} placeholder="Official source URL" />
+              </div>
+              <div>
+                <Label>Finished Garment Measurements (JSON, cm)</Label>
+                <Textarea
+                  value={form.garment_measurements_json}
+                  onChange={(e) => setForm({ ...form, garment_measurements_json: e.target.value })}
+                  rows={6}
+                  className="mt-2 font-mono text-xs"
+                  placeholder={'[{"size":"M","chest_cm":108,"waist_cm":102,"shoulders_cm":46,"sleeve_cm":64}]'}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Product Size Chart Override (JSON)</Label>
+              <Textarea
+                value={form.size_chart_json}
+                onChange={(e) => {
+                  setSelectedBrandChartId('');
+                  setForm({ ...form, size_chart_json: e.target.value });
+                }}
+                rows={7}
+                className="font-mono text-xs"
+                placeholder={'[{"size":"M","chest_min_cm":94,"chest_max_cm":102,"waist_min_cm":80,"waist_max_cm":88}]'}
+              />
+              <p className="text-xs text-slate-500">Use centimeters. Product-specific values override the general brand catalog after this item syncs to The Concierge.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Size / Color Variant Stock (JSON)</Label>
+              <Textarea
+                value={form.variants_json}
+                onChange={(e) => setForm({ ...form, variants_json: e.target.value })}
+                rows={7}
+                className="font-mono text-xs"
+                placeholder={'[{"size":"M","color":"Navy","sku":"SKU-M-NVY","stock_quantity":4}]'}
+              />
+              <p className="text-xs text-slate-500">When variants are present, total stock is calculated from the variants.</p>
+            </div>
+
+            <Button onClick={saveItem} className="w-full bg-violet-600 hover:bg-violet-700" disabled={!form.name}>
+              {editing ? 'Save Changes' : 'Add Item'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+    </PullToRefresh>
+  );
+} + offer.price.toFixed(2)}
+                      </td>
+                      <td className="px-2 py-3 text-right font-semibold text-slate-900">
+                        {offer.stock === null ? 'Unknown' : offer.stock}
+                        <span className="block text-xs font-normal text-slate-500">{offer.availability.replaceAll('_', ' ')}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {onlineOffers.length >= 200 && <p className="mt-3 text-xs text-amber-800">Showing up to 200 recent online offers. Additional offers may exist.</p>}
+            </div>
+          )}
+        </section>
 
         {lowStockCount > 0 && (
           <Card className="border-amber-200 bg-amber-50 mb-6">
