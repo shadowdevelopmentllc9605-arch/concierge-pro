@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { supabase } from '@/api/supabaseClient';
 
 export default function SupabaseLogin() {
+  const emailLinkEnabled = import.meta.env.VITE_ENABLE_EMAIL_LINK_SIGNIN === 'true';
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -22,7 +24,12 @@ export default function SupabaseLogin() {
     setMessage('');
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.origin }
+      options: {
+        // Concierge Pro sign-in must never silently create new shopper identities.
+        shouldCreateUser: false,
+        // Return the retailer to the same application they opened.
+        emailRedirectTo: window.location.origin
+      }
     });
     setWorking(false);
     setMessage(error ? error.message : 'Sign-in link sent. Check your email.');
@@ -40,9 +47,30 @@ export default function SupabaseLogin() {
         <button disabled={working} className="w-full rounded-lg bg-black text-white py-2.5 disabled:opacity-50">
           {working ? 'Signing in…' : 'Sign in'}
         </button>
-        <button type="button" disabled={working || !email} onClick={sendLink} className="w-full text-sm underline disabled:opacity-50">
-          Email me a sign-in link
-        </button>
+        {emailLinkEnabled ? (
+          <button
+            type="button"
+            disabled={working || !email}
+            onClick={sendLink}
+            className="w-full text-sm underline disabled:opacity-50"
+          >
+            Email me a sign-in link
+          </button>
+        ) : (
+          <p className="text-sm text-slate-500">
+            Email sign-in and password recovery are not yet available for outside pilot accounts.
+            Contact us if you need help accessing an invited account.
+          </p>
+        )}
+        <div className="border-t border-slate-200 pt-4 text-sm text-slate-600">
+          <p>Phase One pilot access is by invitation. If you do not have a sign-in yet, request access from Shadow Development LLC.</p>
+          <a
+            href="mailto:shadowdevelopmentllc9605@gmail.com?subject=Concierge%20Pro%20pilot%20access%20request"
+            className="mt-2 inline-block font-medium text-slate-900 underline underline-offset-2"
+          >
+            Request pilot access
+          </a>
+        </div>
         {message && <p className="text-sm text-slate-600">{message}</p>}
       </form>
     </div>
