@@ -32,7 +32,7 @@ async function rows(supabase, table) {
 }
 
 test('anonymous visitor cannot list private businesses', async () => {
-  assert.deepEqual(await rows(client(), 'businesses'), []);
+  // Supabase may deny table access at the SQL grant layer rather than return RLS-filtered rows.\n  const { data, error } = await client().from('businesses').select('id').limit(1);\n  assert.ok(error || data.length === 0, 'Anonymous visitor must not see any private business');
 });
 test('real shopper login cannot read retailer business', async () => {
   const { supabase } = await login('SHOPPER');
@@ -44,9 +44,9 @@ test('two real retailer logins have isolated business visibility', async () => {
     rows(a.supabase, 'businesses'), rows(b.supabase, 'businesses')
   ]);
   assert.ok(aBusinesses.length > 0 && bBusinesses.length > 0, 'Each retailer must complete onboarding');
-  assert.ok(aBusinesses.some(x => x.owner_user_id === a.id), 'Retailer A must own a business');
-  assert.ok(bBusinesses.some(x => x.owner_user_id === b.id), 'Retailer B must own a business');
-  const aIds = new Set(aBusinesses.map(x => x.id));
+  assert.ok(aBusinesses.some(x => x.owner_user_id === a.id), 'Retailer A must own a business');\n  assert.ok(aBusinesses.every(x => x.owner_user_id === a.id), 'Retailer A must not see another owner business');
+  assert.ok(bBusinesses.some(x => x.owner_user_id === b.id), 'Retailer B must own a business');\n  assert.ok(bBusinesses.every(x => x.owner_user_id === b.id), 'Retailer B must not see another owner business');
+  assert.notEqual(a.id, b.id, 'Retailer accounts must be distinct');\n  const aIds = new Set(aBusinesses.map(x => x.id));
   assert.ok(bBusinesses.every(x => !aIds.has(x.id)), 'Retailers must not see each other\'s business');
   const [aInventory, bInventory] = await Promise.all([
     rows(a.supabase, 'inventory_items'), rows(b.supabase, 'inventory_items')
