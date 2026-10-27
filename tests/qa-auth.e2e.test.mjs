@@ -48,7 +48,7 @@ test('two real retailer logins have isolated business visibility', async () => {
   assert.ok(bBusinesses.some(x => x.owner_user_id === b.id), 'Retailer B must own a business');\n  assert.ok(bBusinesses.every(x => x.owner_user_id === b.id), 'Retailer B must not see another owner business');
   assert.notEqual(a.id, b.id, 'Retailer accounts must be distinct');\n  const aIds = new Set(aBusinesses.map(x => x.id));
   assert.ok(bBusinesses.every(x => !aIds.has(x.id)), 'Retailers must not see each other\'s business');
-  const [aInventory, bInventory] = await Promise.all([
+  // Order access is shared only when the retailer is linked through order_items.\n  // Retailer B is a fresh unrelated business and must not see Retailer A's historical orders.\n  const [aOrders, bOrders] = await Promise.all([rows(a.supabase, 'orders'), rows(b.supabase, 'orders')]);\n  assert.ok(bOrders.every(order => !aOrders.some(owned => owned.id === order.id)),\n    'Unrelated retailer must not see another retailer\'s orders');\n  const [aInventory, bInventory] = await Promise.all([
     rows(a.supabase, 'inventory_items'), rows(b.supabase, 'inventory_items')
   ]);
   assert.ok(aInventory.every(x => aIds.has(x.business_id)), 'Retailer A inventory must belong to A');
