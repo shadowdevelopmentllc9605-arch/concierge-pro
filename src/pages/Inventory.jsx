@@ -546,6 +546,7 @@ export default function Inventory() {
                   ))}
                 </tbody>
               </table>
+              </div>
               {onlineOffers.length >= 200 && <p className="mt-3 text-xs text-amber-800">Showing up to 200 recent online offers. Additional offers may exist.</p>}
             </div>
           )}
@@ -560,7 +561,8 @@ export default function Inventory() {
           </Card>
         )}
 
-        <Card className="border-0 shadow-lg overflow-hidden">
+        <h2 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Local inventory</h2>
+        <Card className="w-full min-w-0 border-0 shadow-lg overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50">
@@ -625,7 +627,7 @@ export default function Inventory() {
           {filtered.length === 0 && (
             <div className="p-12 text-center">
               <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No items found</p>
+              <p className="text-slate-500 dark:text-slate-300">No local items found</p>
             </div>
           )}
         </Card>
