@@ -196,35 +196,35 @@ export default function Notifications() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Button
             variant="outline"
-            className="h-auto py-6 flex-col gap-2 bg-white shadow-md hover:shadow-lg"
+            className="h-auto min-h-24 flex-col gap-2 rounded-xl border border-slate-300 !bg-white !text-black shadow-md hover:!bg-slate-50 hover:!text-black hover:shadow-lg focus-visible:ring-2 focus-visible:ring-slate-700"
             onClick={() => openDialog('new_arrival')}
           >
             <Sparkles className="w-6 h-6 text-violet-500" />
-            <span>New Arrivals</span>
+            <span className="font-semibold text-black">New Arrivals</span>
           </Button>
           <Button
             variant="outline"
-            className="h-auto py-6 flex-col gap-2 bg-white shadow-md hover:shadow-lg"
+            className="h-auto min-h-24 flex-col gap-2 rounded-xl border border-slate-300 !bg-white !text-black shadow-md hover:!bg-slate-50 hover:!text-black hover:shadow-lg focus-visible:ring-2 focus-visible:ring-slate-700"
             onClick={() => openDialog('promo')}
           >
             <Tag className="w-6 h-6 text-emerald-500" />
-            <span>Promo / Sale</span>
+            <span className="font-semibold text-black">Promo / Sale</span>
           </Button>
           <Button
             variant="outline"
-            className="h-auto py-6 flex-col gap-2 bg-white shadow-md hover:shadow-lg"
+            className="h-auto min-h-24 flex-col gap-2 rounded-xl border border-slate-300 !bg-white !text-black shadow-md hover:!bg-slate-50 hover:!text-black hover:shadow-lg focus-visible:ring-2 focus-visible:ring-slate-700"
             onClick={() => openDialog('birthday')}
           >
             <Gift className="w-6 h-6 text-pink-500" />
-            <span>Birthday Cards</span>
+            <span className="font-semibold text-black">Birthday Cards</span>
           </Button>
           <Button
             variant="outline"
-            className="h-auto py-6 flex-col gap-2 bg-white shadow-md hover:shadow-lg"
+            className="h-auto min-h-24 flex-col gap-2 rounded-xl border border-slate-300 !bg-white !text-black shadow-md hover:!bg-slate-50 hover:!text-black hover:shadow-lg focus-visible:ring-2 focus-visible:ring-slate-700"
             onClick={() => openDialog('coupon')}
           >
             <Megaphone className="w-6 h-6 text-amber-500" />
-            <span>Send Coupon</span>
+            <span className="font-semibold text-black">Send Coupon</span>
           </Button>
         </div>
 

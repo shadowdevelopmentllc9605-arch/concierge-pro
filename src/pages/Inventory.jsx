@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
+import { supabase } from '@/api/supabaseClient';
+import { normalizeRetailerOffers } from '@/lib/retailerCatalogOffers';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 import { Plus, Pencil, Trash2, Package, Search, AlertTriangle, Loader2, X, Image, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -29,6 +31,9 @@ const inferCategoryGroup = (category = '') => {
 
 export default function Inventory() {
   const [items, setItems] = useState([]);
+  const [onlineOffers, setOnlineOffers] = useState([]);
+  const [offerError, setOfferError] = useState('');
+  const [inventoryWarning, setInventoryWarning] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -85,24 +90,66 @@ export default function Inventory() {
 
   const loadItems = useCallback(async () => {
     try {
+      setInventoryWarning('');
       const context = await getVendorContext();
       setBusinessId(context.businessId);
 
       if (!context.businessId) {
         setItems([]);
+        setOnlineOffers([]);
+        setOfferError('No retailer business is linked to this account.');
         return;
       }
 
-      const [data, locationData, sizingData] = await Promise.all([
+      const [data, locationData, sizingData] = await Promise.allSettled([
         base44.entities.InventoryItem.filter({ business_id: context.businessId }),
         base44.entities.BusinessLocation.filter({ business_id: context.businessId, active: true }),
         base44.entities.BrandSizeChart.filter({ active: true })
       ]);
-      setItems(data);
-      setLocations(locationData);
-      setBrandCharts(sizingData);
+      setItems(data.status === 'fulfilled' ? data.value : []);
+      setLocations(locationData.status === 'fulfilled' ? locationData.value : []);
+      setBrandCharts(sizingData.status === 'fulfilled' ? sizingData.value : []);
+      const unavailable = [
+        data.status === 'rejected' && 'local inventory',
+        locationData.status === 'rejected' && 'store locations',
+        sizingData.status === 'rejected' && 'brand sizing'
+      ].filter(Boolean);
+      if (unavailable.length) setInventoryWarning('Unable to load ' + unavailable.join(', ') + '. Refresh to retry. Online offers are loaded separately.');
+
+      // Online checkout stock lives in retailer_offer, not inventory_items.
+      // Keep both read models distinct; do not copy or resync stock here.
+      setOfferError('');
+      try {
+        const { data: offerRows, error: offersError } = await supabase.from('retailer_offer')
+          .select('id,business_id,product_master_id,product_variant_id,retailer_sku,regular_price,current_price,sale_price,sale_active,availability,stock_quantity,active,channel,updated_at')
+          .eq('business_id', String(context.businessId))
+          .eq('active', true)
+          .order('updated_at', { ascending: false })
+          .limit(200);
+        if (offersError) throw offersError;
+        const masterIds = [...new Set((offerRows || []).map(row => row.product_master_id).filter(Boolean))];
+        const variantIds = [...new Set((offerRows || []).map(row => row.product_variant_id).filter(Boolean))];
+        const [masterResult, variantResult] = await Promise.all([
+          masterIds.length
+            ? supabase.from('product_master').select('id,product_name,brand_name,primary_image_url').in('id', masterIds)
+            : Promise.resolve({ data: [], error: null }),
+          variantIds.length
+            ? supabase.from('product_variant').select('id,sku,size_label,color_name,width_code').in('id', variantIds)
+            : Promise.resolve({ data: [], error: null })
+        ]);
+        if (masterResult.error) throw masterResult.error;
+        if (variantResult.error) throw variantResult.error;
+        setOnlineOffers(normalizeRetailerOffers(offerRows || [], masterResult.data || [], variantResult.data || [], context.businessId));
+      } catch (error) {
+        console.error('Could not load online offers', error);
+        setOnlineOffers([]);
+        setOfferError('Online catalog offers could not be loaded. Local inventory is still available.');
+      }
     } catch (err) {
       console.error(err);
+      setItems([]);
+      setOnlineOffers([]);
+      setOfferError('Unable to load retailer inventory. Refresh to retry.');
     } finally {
       setLoading(false);
     }
@@ -354,6 +401,9 @@ export default function Inventory() {
   );
 
   const lowStockCount = items.filter(i => i.stock_quantity <= (i.low_stock_threshold || 5)).length;
+  const filteredOnlineOffers = onlineOffers.filter(offer =>
+    [offer.name, offer.brand, offer.sku, offer.variant].some(value => String(value || '').toLowerCase().includes(search.toLowerCase()))
+  );
 
   const inferredCategoryGroup = inferCategoryGroup(form.category);
   const availableBrandCharts = brandCharts.filter(chart => {
@@ -395,38 +445,112 @@ export default function Inventory() {
 
   return (
     <PullToRefresh onRefresh={loadItems}>
-    <div className="min-h-screen bg-slate-50/85 dark:bg-slate-900/85 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className="min-h-screen w-full min-w-0 bg-slate-50/85 dark:bg-slate-900/85 p-3 sm:p-6">
+      <div className="w-full min-w-0 max-w-7xl mx-auto">
+        <div className="flex min-w-0 flex-col xl:flex-row xl:items-center justify-between gap-4 mb-5">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">Inventory</h1>
-            <p className="text-slate-500">{items.length} items • {lowStockCount} low stock</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">Inventory</h1>
+            <p className="text-slate-600 dark:text-slate-200">{onlineOffers.length} online offers · {items.length} local items · {lowStockCount} low stock</p>
           </div>
-          <div className="flex gap-3">
-            <div className="relative">
+          <div className="grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:flex xl:flex-wrap">
+            <div className="relative col-span-2 min-w-0 xl:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                className="pl-10 w-64"
+                className="pl-10 w-full min-w-0 bg-white text-slate-900 placeholder:text-slate-500"
                 placeholder="Search items..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Button variant="outline" onClick={syncToCustomerApp} disabled={syncing}>
+            <Button variant="outline" onClick={syncToCustomerApp} disabled={syncing} className="h-auto min-w-0 whitespace-normal px-2 py-2 text-sm bg-white text-slate-900">
               {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
               Sync Customer App
             </Button>
-            <Button onClick={() => openDialog()} className="bg-violet-600 hover:bg-violet-700">
+            <Button onClick={() => openDialog()} className="h-auto min-w-0 whitespace-normal px-2 py-2 bg-violet-600 hover:bg-violet-700 text-white">
               <Plus className="w-4 h-4 mr-2" /> Add Item
             </Button>
           </div>
         </div>
 
+        {inventoryWarning && <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{inventoryWarning}</p>}
         {syncMessage && (
           <div className="mb-6 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
             {syncMessage}
           </div>
         )}
+
+        <section aria-labelledby="online-storefront-offers" className="mb-6 w-full min-w-0 rounded-xl border border-slate-200 bg-white p-3 sm:p-4 text-slate-900 shadow-sm">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h2 id="online-storefront-offers" className="text-lg font-semibold text-slate-900">Online storefront offers</h2>
+            <span className="rounded-md border border-slate-300 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700">Read-only</span>
+          </div>
+          <p className="mb-3 text-sm text-slate-600">
+            These offers supply the shopper catalog and online checkout. Their available stock is separate from the editable local inventory below; no stock has been copied or synchronized between these lists.
+          </p>
+          {offerError ? (
+            <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{offerError}</p>
+          ) : filteredOnlineOffers.length === 0 ? (
+            <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">
+              {onlineOffers.length ? 'No online offers match this search.' : 'No active online catalog offers are linked to this store yet.'}
+            </p>
+          ) : (
+            <div className="min-w-0">
+              <div className="space-y-2 md:hidden">
+                {filteredOnlineOffers.map(offer => (
+                  <article key={offer.id} className="min-w-0 rounded-lg border border-slate-200 p-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      {offer.image && <img src={offer.image} alt="" className="h-12 w-12 shrink-0 rounded-md object-cover" />}
+                      <div className="min-w-0 flex-1 break-words">
+                        <p className="font-semibold text-slate-900">{offer.name}</p>
+                        <p className="text-xs text-slate-600">{[offer.brand, offer.variant, offer.sku].filter(Boolean).join(' · ')}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 rounded-md bg-slate-50 p-2">
+                      <div><p className="text-xs text-slate-600">Online price</p><p className="font-semibold text-slate-900">{offer.price === null ? 'Not set' : '$' + offer.price.toFixed(2)}</p></div>
+                      <div><p className="text-xs text-slate-600">Offer stock</p><p className="font-semibold text-slate-900">{offer.stock === null ? 'Unknown' : offer.stock + ' units'}</p><p className="text-xs text-slate-600">{offer.availability.replaceAll('_', ' ')}</p></div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div className="hidden md:block overflow-x-auto">
+              <table className="w-full min-w-[560px] text-left text-sm">
+                <thead className="border-b border-slate-200 text-slate-600">
+                  <tr>
+                    <th scope="col" className="px-2 py-2">Product</th>
+                    <th scope="col" className="px-2 py-2">Variant / SKU</th>
+                    <th scope="col" className="px-2 py-2 text-right">Online price</th>
+                    <th scope="col" className="px-2 py-2 text-right">Offer stock</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOnlineOffers.map(offer => (
+                    <tr key={offer.id} className="border-b border-slate-100 last:border-0">
+                      <td className="px-2 py-3">
+                        <div className="flex items-center gap-2">
+                          {offer.image ? <img src={offer.image} alt="" className="h-10 w-10 rounded-md object-cover" /> :
+                            <span className="flex h-10 w-10 items-center justify-center rounded-md bg-slate-100"><Package className="h-5 w-5 text-slate-400" /></span>}
+                          <span><span className="block font-medium text-slate-900">{offer.name}</span><span className="text-xs text-slate-500">{offer.brand}</span></span>
+                        </div>
+                      </td>
+                      <td className="px-2 py-3 text-slate-700">
+                        {offer.variant || 'No variant specified'}{offer.sku && <span className="block text-xs text-slate-500">{offer.sku}</span>}
+                      </td>
+                      <td className="px-2 py-3 text-right font-medium text-slate-900">
+                        {offer.price === null ? 'Not set' : '$' + offer.price.toFixed(2)}
+                      </td>
+                      <td className="px-2 py-3 text-right font-semibold text-slate-900">
+                        {offer.stock === null ? 'Unknown' : offer.stock}
+                        <span className="block text-xs font-normal text-slate-500">{offer.availability.replaceAll('_', ' ')}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              </div>
+              {onlineOffers.length >= 200 && <p className="mt-3 text-xs text-amber-800">Showing up to 200 recent online offers. Additional offers may exist.</p>}
+            </div>
+          )}
+        </section>
 
         {lowStockCount > 0 && (
           <Card className="border-amber-200 bg-amber-50 mb-6">
@@ -437,7 +561,8 @@ export default function Inventory() {
           </Card>
         )}
 
-        <Card className="border-0 shadow-lg overflow-hidden">
+        <h2 className="mb-2 text-lg font-semibold text-slate-900 dark:text-white">Local inventory</h2>
+        <Card className="w-full min-w-0 border-0 shadow-lg overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50">
@@ -502,7 +627,7 @@ export default function Inventory() {
           {filtered.length === 0 && (
             <div className="p-12 text-center">
               <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500">No items found</p>
+              <p className="text-slate-500 dark:text-slate-300">No local items found</p>
             </div>
           )}
         </Card>
