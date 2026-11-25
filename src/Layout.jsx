@@ -255,7 +255,7 @@ export default function Layout({ children, currentPageName }) {
       {/* Main Content with page transition + scroll position restore */}
       <main
         id="main-scroll"
-        className="relative flex-1 overflow-auto lg:pt-0"
+        className="relative flex-1 min-w-0 overflow-auto lg:pt-0"
         style={{
           paddingTop: 'calc(3.5rem + env(safe-area-inset-top))',
           paddingBottom: 'calc(4rem + env(safe-area-inset-bottom))',
