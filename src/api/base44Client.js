@@ -31,6 +31,7 @@ const directTables = {
 };
 
 const fieldMaps = {
+  InventoryItem: { images: 'image_urls', tryOn_image: 'try_on_image_url' },
   WishlistItem: { product_id: 'product_master_id', product_image: 'product_image_url', vendor_id: 'legacy_vendor_id' },
   CartItem: { product_id: 'product_master_id', product_image: 'product_image_url', price: 'unit_price', product_price: 'unit_price' },
   Purchase: { user_id: 'shopper_user_id' },
@@ -50,6 +51,7 @@ const fromDb = (entity, row) => {
   if (!row) return row;
   const out = { ...row, created_date: row.created_at, updated_date: row.updated_at };
   if (entity === 'Vendor' || entity === 'Business') out.business_name = row.name;
+  if (entity === 'InventoryItem') { out.images = row.image_urls || []; out.tryOn_image = row.try_on_image_url || ''; }
   if (entity === 'WishlistItem') {
     out.product_id = row.product_master_id;
     out.product_image = row.product_image_url;
