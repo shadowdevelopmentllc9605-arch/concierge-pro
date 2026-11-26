@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { base44 } from '@/api/base44Client';
 import { supabase } from '@/api/supabaseClient';
 import { normalizeRetailerOffers } from '@/lib/retailerCatalogOffers';
+import { validateLocalInventory, previewInventoryCsv } from '@/lib/inventoryValidation';
 import PullToRefresh from '@/components/ui/PullToRefresh';
 import { Plus, Pencil, Trash2, Package, Search, AlertTriangle, Loader2, X, Image, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,15 @@ export default function Inventory() {
   const [locations, setLocations] = useState([]);
   const [brandCharts, setBrandCharts] = useState([]);
   const [selectedBrandChartId, setSelectedBrandChartId] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const saveLock = useRef(false);
+  const [csvText, setCsvText] = useState('');
+  const [csvLocation, setCsvLocation] = useState('');
+  const [csvRows, setCsvRows] = useState([]);
+  const [csvError, setCsvError] = useState('');
+  const [csvOpen, setCsvOpen] = useState(false);
+  const [inventoryLoaded, setInventoryLoaded] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
   const [form, setForm] = useState({
@@ -91,6 +101,7 @@ export default function Inventory() {
   const loadItems = useCallback(async () => {
     try {
       setInventoryWarning('');
+      setInventoryLoaded(false);
       const context = await getVendorContext();
       setBusinessId(context.businessId);
 
@@ -107,6 +118,7 @@ export default function Inventory() {
         base44.entities.BrandSizeChart.filter({ active: true })
       ]);
       setItems(data.status === 'fulfilled' ? data.value : []);
+      setInventoryLoaded(data.status === 'fulfilled' && locationData.status === 'fulfilled');
       setLocations(locationData.status === 'fulfilled' ? locationData.value : []);
       setBrandCharts(sizingData.status === 'fulfilled' ? sizingData.value : []);
       const unavailable = [
@@ -185,11 +197,8 @@ export default function Inventory() {
     setSyncing(true);
     setSyncMessage('');
     try {
-      const response = await base44.functions.invoke('syncVendorCatalog', {});
-      const result = response?.data || response;
-      if (!result?.success) throw new Error(result?.error || 'Catalog sync failed.');
-      setSyncMessage(`Synced ${result.syncedItems || 0} item(s) to The Concierge.`);
       await loadItems();
+      setSyncMessage('Catalog refreshed. Local items are not automatically published to the shopper catalog.');
     } catch (err) {
       setSyncMessage(err?.response?.data?.error || err?.message || 'Catalog sync failed.');
     } finally {
@@ -205,6 +214,7 @@ export default function Inventory() {
   };
 
   const openDialog = (item = null) => {
+    setSaveError('');
     setSelectedBrandChartId('');
     if (item) {
       setEditing(item);
@@ -226,7 +236,7 @@ export default function Inventory() {
         price: item.price?.toString() || '',
         cost: item.cost?.toString() || '',
         stock_quantity: item.stock_quantity?.toString() || '',
-        low_stock_threshold: item.low_stock_threshold?.toString() || '5',
+        low_stock_threshold: item.low_stock_threshold?.toString() ?? '5',
         images: item.images || [],
         sizes: item.sizes?.join(', ') || '',
         colors: item.colors?.join(', ') || '',
@@ -293,7 +303,11 @@ export default function Inventory() {
   };
 
   const saveItem = async () => {
-    if (!businessId) return;
+    if (!businessId || !inventoryLoaded || saveLock.current) return;
+    setSaveError('');
+    let validated;
+    try { validated = validateLocalInventory(form, { items, locations, editingId: editing?.id }); }
+    catch (error) { setSaveError(error.message); return; }
 
     let sizeChart = [];
     let garmentMeasurements = [];
@@ -304,18 +318,19 @@ export default function Inventory() {
       variants = JSON.parse(form.variants_json || '[]');
       if (!Array.isArray(sizeChart) || !Array.isArray(garmentMeasurements) || !Array.isArray(variants)) throw new Error('arrays required');
     } catch {
-      alert('Size chart, garment measurements, and variant stock must be valid JSON arrays.');
+      setSaveError('Size chart, garment measurements, and variant stock must be valid JSON arrays.');
       return;
     }
 
-    const totalVariantStock = variants.length
-      ? variants.reduce((sum, variant) => sum + Math.max(0, Number(variant.stock_quantity || 0)), 0)
-      : null;
+    if (variants.length) {
+      setSaveError('Variant-level stock cannot yet be saved to local inventory. Clear variant JSON and enter the actual total stock, or wait for shared catalog variant management.');
+      return;
+    }
 
     const data = {
       business_id: businessId,
-      name: form.name,
-      sku: form.sku,
+      name: validated.name,
+      sku: validated.sku || null,
       brand: form.brand,
       style_type: form.style_type,
       category: form.category,
@@ -328,12 +343,12 @@ export default function Inventory() {
         sock_profile: form.footwear_sock_profile || 'not_applicable',
         fit_notes: form.footwear_fit_notes || ''
       },
-      location_id: form.location_id,
+      location_id: validated.location_id,
       description: form.description,
-      price: parseFloat(form.price) || 0,
-      cost: parseFloat(form.cost) || 0,
-      stock_quantity: totalVariantStock ?? (parseInt(form.stock_quantity) || 0),
-      low_stock_threshold: parseInt(form.low_stock_threshold) || 5,
+      price: validated.price,
+      cost: validated.cost,
+      stock_quantity: validated.stock_quantity,
+      low_stock_threshold: validated.low_stock_threshold,
       images: form.images,
       sizes: form.sizes.split(',').map(s => s.trim()).filter(Boolean),
       colors: form.colors.split(',').map(s => s.trim()).filter(Boolean),
@@ -351,34 +366,25 @@ export default function Inventory() {
         source_retrieved_at: form.garment_fit_source_url ? new Date().toISOString() : ''
       },
       garment_measurements: garmentMeasurements,
-      variants,
-      dimensions: {
-        width: parseFloat(form.dimension_width) || 0,
-        height: parseFloat(form.dimension_height) || 0,
-        depth: parseFloat(form.dimension_depth) || 0,
-        unit: form.dimension_unit || 'inches'
-      }
+      dimensions: validated.dimensions
     };
 
-    // Optimistic update
-    if (editing) {
-      setItems(prev => prev.map(i => i.id === editing.id ? { ...i, ...data } : i));
-    } else {
-      const tempId = `temp-${Date.now()}`;
-      setItems(prev => [{ id: tempId, ...data }, ...prev]);
-    }
-    setDialogOpen(false);
-
+    saveLock.current = true;
+    setSaving(true);
     try {
       if (editing) {
         await base44.entities.InventoryItem.update(editing.id, data);
       } else {
         await base44.entities.InventoryItem.create(data);
       }
-      loadItems(); // reconcile with server
+      setDialogOpen(false);
+      await loadItems();
     } catch (err) {
       console.error(err);
-      loadItems(); // revert on error
+      setSaveError('Item was not saved. Check your permissions or connection and retry.');
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
     }
   };
 
@@ -400,7 +406,7 @@ export default function Inventory() {
     i.category?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const lowStockCount = items.filter(i => i.stock_quantity <= (i.low_stock_threshold || 5)).length;
+  const lowStockCount = items.filter(i => i.stock_quantity <= (i.low_stock_threshold ?? 5)).length;
   const filteredOnlineOffers = onlineOffers.filter(offer =>
     [offer.name, offer.brand, offer.sku, offer.variant].some(value => String(value || '').toLowerCase().includes(search.toLowerCase()))
   );
@@ -464,13 +470,31 @@ export default function Inventory() {
             </div>
             <Button variant="outline" onClick={syncToCustomerApp} disabled={syncing} className="h-auto min-w-0 whitespace-normal px-2 py-2 text-sm bg-white text-slate-900">
               {syncing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-              Sync Customer App
+              Refresh Catalog
             </Button>
-            <Button onClick={() => openDialog()} className="h-auto min-w-0 whitespace-normal px-2 py-2 bg-violet-600 hover:bg-violet-700 text-white">
+            <Button disabled={!inventoryLoaded || !businessId} onClick={() => openDialog()} className="h-auto min-w-0 whitespace-normal px-2 py-2 bg-violet-600 hover:bg-violet-700 text-white">
               <Plus className="w-4 h-4 mr-2" /> Add Item
             </Button>
           </div>
         </div>
+
+        <section className="mb-4 rounded-xl border border-slate-200 bg-white p-3 text-slate-900">
+          <Button variant="outline" disabled={!inventoryLoaded || !businessId} onClick={() => { setCsvOpen(v=>!v); setCsvRows([]); setCsvError(''); }} className="w-full">Preview bulk inventory CSV</Button>
+          {csvOpen && <div className="mt-3 space-y-3">
+            <p className="text-sm">Preview only. No items or online offers will be created. Paste up to 200 rows using the supported headers. Each SKU must be unique at its selected location.</p>
+            <select aria-label="CSV location" value={csvLocation} onChange={e=>{setCsvLocation(e.target.value);setCsvRows([]);setCsvError('');}} className="w-full rounded-md border p-2">
+              <option value="">All / default location</option>
+              {locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}
+            </select>
+            <Textarea aria-label="Inventory CSV" value={csvText} maxLength={200000} rows={5} onChange={e=>{setCsvText(e.target.value);setCsvRows([]);setCsvError('');}} placeholder={'name,sku,brand,category,price,stock_quantity\nExample Shirt,TEST-01,Example,Shirts,25.00,4'}/>
+            <Button className="w-full" onClick={()=>{try{setCsvRows(previewInventoryCsv(csvText,items,csvLocation||null));setCsvError('');}catch(e){setCsvRows([]);setCsvError(e.message);}}}>Validate CSV</Button>
+            {csvError && <p role="alert" className="text-sm text-red-700">{csvError}</p>}
+            {csvRows.length>0 && <div role="status" className="space-y-2 text-sm">
+              <p>{csvRows.filter(r=>!r.error).length} valid rows · {csvRows.filter(r=>r.error).length} rejected rows. Duplicate checks cover loaded inventory only.</p>
+              <div className="max-h-64 overflow-y-auto">{csvRows.map(r=><p key={r.row} className="break-words border-b py-1">Row {r.row}: {r.error ? 'Rejected — '+r.error : 'Valid — '+r.data.sku+' · '+r.data.name}</p>)}</div>
+            </div>}
+          </div>}
+        </section>
 
         {inventoryWarning && <p role="status" className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{inventoryWarning}</p>}
         {syncMessage && (
@@ -602,7 +626,7 @@ export default function Inventory() {
                   </TableCell>
                   <TableCell className="text-right font-medium">${item.price?.toFixed(2)}</TableCell>
                   <TableCell className="text-right">
-                    <Badge className={item.stock_quantity <= (item.low_stock_threshold || 5) 
+                    <Badge className={item.stock_quantity <= (item.low_stock_threshold ?? 5) 
                       ? 'bg-red-100 text-red-700' 
                       : 'bg-emerald-100 text-emerald-700'
                     }>
@@ -633,7 +657,7 @@ export default function Inventory() {
         </Card>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={open => { if (!saveLock.current) setDialogOpen(open); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit Item' : 'Add Item'}</DialogTitle>
@@ -1116,11 +1140,12 @@ export default function Inventory() {
                 className="font-mono text-xs"
                 placeholder={'[{"size":"M","color":"Navy","sku":"SKU-M-NVY","stock_quantity":4}]'}
               />
-              <p className="text-xs text-slate-500">When variants are present, total stock is calculated from the variants.</p>
+              <p className="text-xs text-slate-500">Variant-level stock management is not yet available. Enter actual total local stock above and leave this array empty.</p>
             </div>
 
-            <Button onClick={saveItem} className="w-full bg-violet-600 hover:bg-violet-700" disabled={!form.name}>
-              {editing ? 'Save Changes' : 'Add Item'}
+            {saveError && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-800">{saveError}</p>}
+            <Button onClick={saveItem} className="w-full bg-violet-600 hover:bg-violet-700" disabled={!form.name.trim() || saving || !inventoryLoaded}>
+              {saving ? 'Saving…' : editing ? 'Save Changes' : 'Add Item'}
             </Button>
           </div>
         </DialogContent>
