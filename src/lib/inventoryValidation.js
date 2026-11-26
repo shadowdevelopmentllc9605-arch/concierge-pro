@@ -50,7 +50,7 @@ export function previewInventoryCsv(text, items=[], locationId=null) {
    const data=Object.fromEntries(headers.map((h,j)=>[h,cells[j].trim()]));
    if(!data.sku)throw new Error('SKU is required for bulk preview.');
    if(!data.price||!data.stock_quantity)throw new Error('Price and stock are required.');
-   const normalized=validateLocalInventory(data,{items});
+   const normalized=validateLocalInventory(data);
    if(items.some(x=>(x.location_id||null)===locationId && skuKey(x.sku)===skuKey(data.sku)))throw new Error('SKU already exists at this location.');
    return {row:i+2,data:{...data,...normalized,location_id:locationId},error:''};
   }catch(e){return {row:i+2,data:null,error:e.message};}
